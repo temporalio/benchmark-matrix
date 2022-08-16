@@ -1,0 +1,12 @@
+resources:
+- ../base
+- postgres.yaml
+patches:
+- path: env.yaml
+  target:
+    kind: Deployment
+    labelSelector: app.kubernetes.io/part-of=temporal
+- path: schema.yaml
+  target:
+    kind: Deployment
+    labelSelector: app.kubernetes.io/part-of=temporal,app.kubernetes.io/component=frontend

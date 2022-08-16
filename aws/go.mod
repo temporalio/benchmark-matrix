@@ -5,6 +5,7 @@ go 1.17
 require (
 	github.com/pulumi/pulumi-awsx/sdk v1.0.0-beta.10
 	github.com/pulumi/pulumi-eks/sdk v0.41.0
+	github.com/pulumi/pulumi-kubernetes/sdk/v3 v3.17.0
 	github.com/pulumi/pulumi/sdk/v3 v3.35.3
 )
 
@@ -34,7 +35,6 @@ require (
 	github.com/pkg/term v1.1.0 // indirect
 	github.com/pulumi/pulumi-aws/sdk/v5 v5.9.2 // indirect
 	github.com/pulumi/pulumi-docker/sdk/v3 v3.2.0 // indirect
-	github.com/pulumi/pulumi-kubernetes/sdk/v3 v3.17.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.8.1 // indirect
 	github.com/sabhiram/go-gitignore v0.0.0-20180611051255-d3107576ba94 // indirect

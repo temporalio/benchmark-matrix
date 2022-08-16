@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: benchmark-workers
+  name: benchmark-workers
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: benchmark-workers
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: benchmark-workers
+    spec:
+      initContainers:
+        - name: create-namespace
+          image: temporalio/admin-tools:1.17.2
+          env:
+          - name: TEMPORAL_CLI_ADDRESS
+            value: "temporal-frontend:7233"
+          command: ["tctl", "--namespace", "default", "namespace", "register"]
+      containers:
+      - image: ghcr.io/temporalio/benchmark-workers:main
+        imagePullPolicy: Always
+        name: benchmark-workers
+        env:
+        - name: TEMPORAL_GRPC_ENDPOINT
+          value: "temporal-frontend:7233"
+        - name: TEMPORAL_NAMESPACE
+          value: "default"
+        - name: TEMPORAL_TASK_QUEUE
+          value: "benchmark"
+        - name: TEMPORAL_WORKFLOW_TASK_POLLERS
+          value: "16"
+        - name: TEMPORAL_WORKFLOW_ACTIVITY_TASK_POLLERS
+          value: "8"
+      restartPolicy: Always

@@ -1,6 +1,7 @@
 resources:
-- ../base
 - postgres.yaml
+- ../base
+- ../benchmark-workers
 patches:
 - path: env.yaml
   target:

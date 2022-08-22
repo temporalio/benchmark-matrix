@@ -1,0 +1,3 @@
+resources:
+- ../base/temporal-postgres
+- ../base/benchmark-workers

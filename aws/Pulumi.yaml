@@ -1,3 +1,0 @@
-name: temporal-benchmark
-runtime: go
-description: Benchmark clusters for Temporal

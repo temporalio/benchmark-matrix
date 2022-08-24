@@ -24,6 +24,9 @@ spec:
     type: RollingUpdate
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '8000'
       labels:
         app.kubernetes.io/component: worker
         app.kubernetes.io/instance: temporal
@@ -42,6 +45,8 @@ spec:
           value: worker
         - name: PUBLIC_FRONTEND_ADDRESS
           value: temporal-frontend:7233
+        - name: PROMETHEUS_ENDPOINT
+          value: 0.0.0.0:8000
         image: temporalio/server:1.17.2
         imagePullPolicy: IfNotPresent
         name: temporal

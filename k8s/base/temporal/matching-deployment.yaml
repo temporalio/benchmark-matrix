@@ -24,6 +24,9 @@ spec:
     type: RollingUpdate
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '8000'
       labels:
         app.kubernetes.io/component: matching
         app.kubernetes.io/instance: temporal
@@ -40,6 +43,8 @@ spec:
               fieldPath: status.podIP
         - name: SERVICES
           value: matching
+        - name: PROMETHEUS_ENDPOINT
+          value: 0.0.0.0:8000
         image: temporalio/server:1.17.2
         imagePullPolicy: IfNotPresent
         livenessProbe:

@@ -7,7 +7,7 @@ export default () => {
     client.startWorkflow(
         {
             task_queue: 'benchmark',
-            id: 'wf-' + scenario.iterationInTest,
+            id: 'echo-' + scenario.iterationInTest,
         },
         'ExecuteActivity',
         {"Count": 1, "Activity": "Echo", "Input": {"Message": "test"}},

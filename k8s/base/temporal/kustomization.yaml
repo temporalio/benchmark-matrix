@@ -6,5 +6,6 @@ resources:
 - history-deployment.yaml
 configMapGenerator:
 - name: temporal-dynamic-config
+  namespace: default
   files:
   - dynamic_config.yaml

@@ -8,6 +8,7 @@ metadata:
     app.kubernetes.io/part-of: temporal
     app.kubernetes.io/version: 1.17.2
   name: temporal-frontend
+  namespace: default
 spec:
   progressDeadlineSeconds: 600
   replicas: 1

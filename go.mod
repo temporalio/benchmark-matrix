@@ -5,7 +5,7 @@ go 1.17
 require (
 	github.com/pulumi/pulumi-awsx/sdk v1.0.0-beta.10
 	github.com/pulumi/pulumi-eks/sdk v0.41.0
-	github.com/pulumi/pulumi-kubernetes/sdk/v3 v3.17.0
+	github.com/pulumi/pulumi-kubernetes/sdk/v3 v3.21.1
 	github.com/pulumi/pulumi/sdk/v3 v3.35.3
 )
 

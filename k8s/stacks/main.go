@@ -55,9 +55,9 @@ func main() {
 			return err
 		}
 
-		_, err = kustomize.NewDirectory(ctx, "../local",
+		_, err = kustomize.NewDirectory(ctx, "../monitoring",
 			kustomize.DirectoryArgs{
-				Directory: pulumi.String("../local"),
+				Directory: pulumi.String("../monitoring"),
 			},
 			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
 				"kubernetes": k8sCluster,

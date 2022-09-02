@@ -1,0 +1,7 @@
+bases:
+- ../../base/temporal
+- ../../base/benchmark-workers
+- ../../benchmarks
+components:
+- ../../components/mysql
+- ../../components/tuning/512-4

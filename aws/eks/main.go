@@ -4,6 +4,7 @@ import (
 	"github.com/pulumi/pulumi-awsx/sdk/go/awsx/ec2"
 	"github.com/pulumi/pulumi-eks/sdk/go/eks"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 )
 
 func main() {
@@ -26,6 +27,10 @@ func main() {
 			return err
 		}
 
+		cfg := config.New(ctx, "")
+		clusterName := cfg.Require("cluster-name")
+
+		ctx.Export("cluster-name", pulumi.String(clusterName))
 		ctx.Export("kubeconfig", cluster.Kubeconfig)
 		return nil
 	})

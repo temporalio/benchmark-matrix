@@ -1,0 +1,2 @@
+config:
+  temporal-benchmarks-aws-eks:cluster-name: eks-small

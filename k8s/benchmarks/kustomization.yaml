@@ -1,9 +1,5 @@
 generatorOptions:
   disableNameSuffixHash: true
-secretGenerator:
-- name: benchmark-monitoring
-  envs:
-  - .env.monitoring
 configMapGenerator:
 - name: benchmark-scripts
   files:

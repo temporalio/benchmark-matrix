@@ -12,13 +12,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 )
 
-func getKubeconfig(ctx *pulumi.Context, clusterStackName string) (pulumi.StringOutput, error) {
-	clusterRef, err := pulumi.NewStackReference(ctx, clusterStackName, nil)
-	if err != nil {
-		return pulumi.StringOutput{}, err
-	}
-
-	return clusterRef.GetOutput(pulumi.String("kubeconfig")).ApplyT(
+func getKubeconfig(clusterStackRef *pulumi.StackReference) (pulumi.StringOutput, error) {
+	return clusterStackRef.GetOutput(pulumi.String("kubeconfig")).ApplyT(
 		func(config interface{}) (string, error) {
 			b, err := json.Marshal(config)
 			if err != nil {
@@ -29,19 +24,31 @@ func getKubeconfig(ctx *pulumi.Context, clusterStackName string) (pulumi.StringO
 	).(pulumi.StringOutput), nil
 }
 
+func getClusterName(clusterStackRef *pulumi.StackReference) (pulumi.StringOutput, error) {
+	return clusterStackRef.GetStringOutput(pulumi.String("cluster-name")), nil
+}
+
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
 		cfg := config.New(ctx, "")
 		clusterStackName := cfg.Require("cluster")
-		kustomizeDirectory := cfg.Require("kustomize_directory")
+		clusterStackRef, err := pulumi.NewStackReference(ctx, clusterStackName, nil)
+		if err != nil {
+			return err
+		}
 
-		kubeconfig, err := getKubeconfig(ctx, clusterStackName)
+		kustomizeDirectory := cfg.Require("kustomize_directory")
+		clusterName, err := getClusterName(clusterStackRef)
+		if err != nil {
+			return err
+		}
+
+		kubeconfig, err := getKubeconfig(clusterStackRef)
 		if err != nil {
 			return err
 		}
 		k8sCluster, err := k8s.NewProvider(ctx, clusterStackName, &k8s.ProviderArgs{
-			Kubeconfig:            kubeconfig,
-			EnableServerSideApply: pulumi.Bool(true),
+			Kubeconfig: kubeconfig,
 		})
 		if err != nil {
 			return err
@@ -59,6 +66,33 @@ func main() {
 			return err
 		}
 
+		benchmarkConfig, err := corev1.NewConfigMap(ctx, "benchmark-config",
+			&corev1.ConfigMapArgs{
+				Metadata: &metav1.ObjectMetaArgs{
+					Name: pulumi.String("benchmark-config"),
+				},
+				Data: pulumi.ToStringMapOutput(map[string]pulumi.StringOutput{"CLUSTER_NAME": clusterName}),
+			},
+			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
+				"kubernetes": k8sCluster,
+			}),
+		)
+		if err != nil {
+			return err
+		}
+
+		kubeStateMetrics, err := kustomize.NewDirectory(ctx, "kube-state-metrics",
+			kustomize.DirectoryArgs{
+				Directory: pulumi.String("https://github.com/kubernetes/kube-state-metrics"),
+			},
+			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
+				"kubernetes": k8sCluster,
+			}),
+		)
+		if err != nil {
+			return err
+		}
+
 		monitoringSystem, err := kustomize.NewDirectory(ctx, "../monitoring",
 			kustomize.DirectoryArgs{
 				Directory: pulumi.String("../monitoring"),
@@ -66,6 +100,7 @@ func main() {
 			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
 				"kubernetes": k8sCluster,
 			}),
+			pulumi.DependsOn([]pulumi.Resource{kubeStateMetrics, benchmarkConfig}),
 		)
 		if err != nil {
 			return err
@@ -102,8 +137,9 @@ func main() {
 						Spec: &corev1.PodSpecArgs{
 							Containers: corev1.ContainerArray{
 								&corev1.ContainerArgs{
-									Name:  pulumi.String("k6"),
-									Image: pulumi.String("ghcr.io/temporalio/xk6-temporal:main"),
+									Name:            pulumi.String("k6"),
+									Image:           pulumi.String("ghcr.io/temporalio/xk6-temporal:main"),
+									ImagePullPolicy: pulumi.String("Always"),
 									Command: pulumi.StringArray{
 										pulumi.String("k6"),
 										pulumi.String("run"),
@@ -122,7 +158,7 @@ func main() {
 									EnvFrom: corev1.EnvFromSourceArray{
 										corev1.EnvFromSourceArgs{
 											SecretRef: corev1.SecretEnvSourceArgs{
-												Name: pulumi.String("benchmark-monitoring"),
+												Name: pulumi.String("monitoring-env"),
 											},
 										},
 									},

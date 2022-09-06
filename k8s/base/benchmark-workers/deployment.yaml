@@ -11,6 +11,9 @@ spec:
       app.kubernetes.io/name: benchmark-workers
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '8000'
       labels:
         app.kubernetes.io/name: benchmark-workers
     spec:
@@ -29,6 +32,8 @@ spec:
         env:
         - name: TEMPORAL_GRPC_ENDPOINT
           value: "temporal-frontend:7233"
+        - name: PROMETHEUS_ENDPOINT
+          value: 0.0.0.0:8000
         - name: TEMPORAL_NAMESPACE
           value: "default"
         - name: TEMPORAL_TASK_QUEUE

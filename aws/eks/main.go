@@ -29,9 +29,10 @@ func main() {
 
 		cfg := config.New(ctx, "")
 		clusterName := cfg.Require("cluster-name")
+		kubeconfig := pulumi.ToSecret(cluster.Kubeconfig)
 
 		ctx.Export("cluster-name", pulumi.String(clusterName))
-		ctx.Export("kubeconfig", cluster.Kubeconfig)
+		ctx.Export("kubeconfig", kubeconfig)
 		return nil
 	})
 }

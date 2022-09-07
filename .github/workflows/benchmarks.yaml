@@ -1,0 +1,25 @@
+name: Run Benchmarks
+on:
+  - workflow_dispatch
+jobs:
+  preview:
+    name: Preview benchmark run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: 1.18.x
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+      - run: go mod download
+      - uses: pulumi/actions@v3
+        with:
+          work-dir: aws/eks
+          command: preview
+          stack-name: small
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}

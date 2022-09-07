@@ -5,6 +5,9 @@ jobs:
   preview:
     name: Preview benchmark run
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
@@ -15,7 +18,6 @@ jobs:
         with:
           aws-region: ${{ secrets.AWS_REGION }}
           role-to-assume: ${{ secrets.AWS_ROLE }}
-          role-session-name: BenchmarksSession
       - run: go mod download
       - uses: pulumi/actions@v3
         with:

@@ -30,7 +30,7 @@ jobs:
         if: always()
         with:
           work-dir: aws/eks
-          command: down
+          command: destroy
           stack-name: small
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}

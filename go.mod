@@ -1,4 +1,4 @@
-module temporal-benchmarks-aws
+module "github.com/temporalio/temporal-benchmarks"
 
 go 1.17
 

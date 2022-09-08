@@ -1,23 +1,30 @@
 package main
 
 import (
-	"github.com/pulumi/pulumi-awsx/sdk/go/awsx/ec2"
+	"encoding/json"
+
 	"github.com/pulumi/pulumi-eks/sdk/go/eks"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
+	"github.com/temporalio/temporal-benchmarks/utils"
 )
 
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
-		vpc, err := ec2.NewVpc(ctx, "temporal-benchmark", &ec2.VpcArgs{})
+		cfg := config.New(ctx, "")
+
+		envStackName := cfg.Require("EnvironmentStackName")
+		clusterName := cfg.Require("ClusterName")
+
+		envStackRef, err := pulumi.NewStackReference(ctx, envStackName, nil)
 		if err != nil {
 			return err
 		}
 
 		cluster, err := eks.NewCluster(ctx, "temporal-benchmark", &eks.ClusterArgs{
-			VpcId:                        vpc.VpcId,
-			PublicSubnetIds:              vpc.PublicSubnetIds,
-			PrivateSubnetIds:             vpc.PrivateSubnetIds,
+			VpcId:                        utils.GetStackStringOutput(envStackRef, "VpcId"),
+			PublicSubnetIds:              utils.GetStackStringArrayOutput(envStackRef, "PublicSubnetIds"),
+			PrivateSubnetIds:             utils.GetStackStringArrayOutput(envStackRef, "PrivateSubnetIds"),
 			NodeAssociatePublicIpAddress: pulumi.Bool(false),
 			DesiredCapacity:              pulumi.Int(3),
 			MinSize:                      pulumi.Int(3),
@@ -27,12 +34,19 @@ func main() {
 			return err
 		}
 
-		cfg := config.New(ctx, "")
-		clusterName := cfg.Require("cluster-name")
-		kubeconfig := pulumi.ToSecret(cluster.Kubeconfig)
+		kubeconfig := cluster.Kubeconfig.ApplyT(
+			func(config interface{}) (string, error) {
+				b, err := json.Marshal(config)
+				if err != nil {
+					return "", err
+				}
+				return string(b), nil
+			},
+		).(pulumi.StringOutput)
 
-		ctx.Export("cluster-name", pulumi.String(clusterName))
-		ctx.Export("kubeconfig", kubeconfig)
+		ctx.Export("ClusterName", pulumi.String(clusterName))
+		ctx.Export("Kubeconfig", pulumi.ToSecret(kubeconfig))
+
 		return nil
 	})
 }

@@ -1,0 +1,3 @@
+name: temporal-benchmarks-aws-environment
+runtime: go
+description: AWS Environment for Temporal benchmarks

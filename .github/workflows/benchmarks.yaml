@@ -1,6 +1,6 @@
 name: Run Benchmarks
 on:
-  - workflow_dispatch
+  - workflow_dispatch 
 jobs:
   preview:
     name: Preview benchmark run
@@ -22,7 +22,15 @@ jobs:
       - uses: pulumi/actions@v3
         with:
           work-dir: aws/eks
-          command: preview
+          command: up
+          stack-name: small
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}
+      - uses: pulumi/actions@v3
+        if: always()
+        with:
+          work-dir: aws/eks
+          command: down
           stack-name: small
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}

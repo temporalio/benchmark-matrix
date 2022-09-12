@@ -26,6 +26,10 @@ jobs:
           stack-name: small
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}
+      - shell: bash
+        env:
+          MONITORING_ENV: ${{ secrets.MONITORING_ENV }}
+        run: echo "${MONITORING_ENV}" > k8s/monitoring/.env.grafana
       - uses: pulumi/actions@v3
         with:
           work-dir: k8s/stacks

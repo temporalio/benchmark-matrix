@@ -30,7 +30,6 @@ spec:
       labels:
         app.kubernetes.io/component: history
         app.kubernetes.io/instance: temporal
-        app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/name: temporal
         app.kubernetes.io/part-of: temporal
         app.kubernetes.io/version: 1.17.2
@@ -46,6 +45,9 @@ spec:
           value: history
         - name: PROMETHEUS_ENDPOINT
           value: 0.0.0.0:8000
+        envFrom:
+        - configMapRef:
+            name: temporal-persistence-env
         image: temporalio/server:1.17.2
         imagePullPolicy: IfNotPresent
         livenessProbe:

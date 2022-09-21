@@ -2,8 +2,11 @@ name: Run Benchmarks
 on:
   - workflow_dispatch 
 jobs:
-  preview:
-    name: Preview benchmark run
+  benchmarks:
+    name: Run benchmarks
+    strategy:
+      matrix:
+        stack: [eks-rds-postgres-m6i-large]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -19,13 +22,6 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
           role-to-assume: ${{ secrets.AWS_ROLE }}
       - run: go mod download
-      - uses: pulumi/actions@v3
-        with:
-          work-dir: aws/eks
-          command: up
-          stack-name: small
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}
       - shell: bash
         env:
           MONITORING_ENV: ${{ secrets.MONITORING_ENV }}
@@ -34,35 +30,14 @@ jobs:
         with:
           work-dir: k8s/stacks
           command: up
-          stack-name: eks-512-4-postgres
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}
-      - uses: pulumi/actions@v3
-        with:
-          work-dir: k8s/stacks
-          command: destroy
-          stack-name: eks-512-4-postgres
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}
-      - uses: pulumi/actions@v3
-        with:
-          work-dir: k8s/stacks
-          command: up
-          stack-name: eks-512-4-mysql
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}
-      - uses: pulumi/actions@v3
-        with:
-          work-dir: k8s/stacks
-          command: destroy
-          stack-name: eks-512-4-mysql
+          stack-name: ${{ matrix.stack }}
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}
       - uses: pulumi/actions@v3
         if: always()
         with:
-          work-dir: aws/eks
+          work-dir: k8s/stacks
           command: destroy
-          stack-name: small
+          stack-name: ${{ matrix.stack }}
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}

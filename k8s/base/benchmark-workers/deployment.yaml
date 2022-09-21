@@ -5,7 +5,7 @@ metadata:
     app.kubernetes.io/name: benchmark-workers
   name: benchmark-workers
 spec:
-  replicas: 1
+  replicas: 4
   selector:
     matchLabels:
       app.kubernetes.io/name: benchmark-workers
@@ -39,7 +39,7 @@ spec:
         - name: TEMPORAL_TASK_QUEUE
           value: "benchmark"
         - name: TEMPORAL_WORKFLOW_TASK_POLLERS
-          value: "16"
+          value: "32"
         - name: TEMPORAL_WORKFLOW_ACTIVITY_TASK_POLLERS
-          value: "8"
+          value: "16"
       restartPolicy: Always

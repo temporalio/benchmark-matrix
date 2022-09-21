@@ -8,4 +8,3 @@ configMapGenerator:
   - dynamic_config.yaml
 patchesStrategicMerge:
 - env.yaml
-- scale.yaml

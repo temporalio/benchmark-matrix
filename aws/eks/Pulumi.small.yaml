@@ -1,3 +1,0 @@
-config:
-  temporal-benchmarks-aws-eks:EnvironmentStackName: temporalio/temporal-benchmarks-aws-environment/main
-  temporal-benchmarks-aws-eks:ClusterName: eks-small

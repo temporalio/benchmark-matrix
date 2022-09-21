@@ -1,0 +1,7 @@
+config:
+  pulumi:template: kubernetes-go
+  temporal-benchmarks-k8s:EnvironmentStackName: temporalio/temporal-benchmarks-aws-environment/main
+  temporal-benchmarks-k8s:ClusterType: eks
+  temporal-benchmarks-k8s:PersistenceType: rds-postgres
+  temporal-benchmarks-k8s:PersistenceInstance: db.m6i.large
+  temporal-benchmarks-k8s:KustomizeDirectory: ../overlays/rds-postgres-m6i-large

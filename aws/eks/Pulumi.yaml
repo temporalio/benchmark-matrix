@@ -1,3 +1,0 @@
-name: temporal-benchmarks-aws-eks
-runtime: go
-description: AWS EKS clusters for Temporal benchmarks

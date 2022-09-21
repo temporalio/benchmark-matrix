@@ -1,8 +1,9 @@
-module "github.com/temporalio/temporal-benchmarks"
+module github.com/temporalio/temporal-benchmarks
 
 go 1.17
 
 require (
+	github.com/pulumi/pulumi-aws/sdk/v5 v5.9.2
 	github.com/pulumi/pulumi-awsx/sdk v1.0.0-beta.10
 	github.com/pulumi/pulumi-eks/sdk v0.41.0
 	github.com/pulumi/pulumi-kubernetes/sdk/v3 v3.21.1
@@ -33,7 +34,6 @@ require (
 	github.com/opentracing/opentracing-go v1.1.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/term v1.1.0 // indirect
-	github.com/pulumi/pulumi-aws/sdk/v5 v5.9.2 // indirect
 	github.com/pulumi/pulumi-docker/sdk/v3 v3.2.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.8.1 // indirect

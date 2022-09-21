@@ -3,4 +3,4 @@ generatorOptions:
 configMapGenerator:
 - name: benchmark-scripts
   files:
-  - echo.js
+  - ramp_up.js

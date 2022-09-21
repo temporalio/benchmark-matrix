@@ -46,6 +46,9 @@ spec:
           value: frontend
         - name: PROMETHEUS_ENDPOINT
           value: 0.0.0.0:8000
+        envFrom:
+        - configMapRef:
+            name: temporal-persistence-env
         image: temporalio/server:1.17.2
         imagePullPolicy: IfNotPresent
         livenessProbe:

@@ -1,4 +1,0 @@
-config:
-  pulumi:template: kubernetes-go
-  temporal-benchmarks-k8s:ClusterStackName: temporalio/temporal-benchmarks-aws-eks/small
-  temporal-benchmarks-k8s:KustomizeDirectory: ../overlays/512-4-postgres

@@ -4,5 +4,4 @@ bases:
 - ../../benchmarks
 components:
 - ../../components/auto-setup
-- ../../components/tuning/shards/512
 - ../../components/tuning/task_queue_partitions/8

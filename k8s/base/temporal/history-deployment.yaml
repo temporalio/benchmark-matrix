@@ -6,11 +6,11 @@ metadata:
     app.kubernetes.io/instance: temporal
     app.kubernetes.io/name: temporal
     app.kubernetes.io/part-of: temporal
-    app.kubernetes.io/version: 1.17.2
+    app.kubernetes.io/version: 1.18.0
   name: temporal-history
 spec:
   progressDeadlineSeconds: 600
-  replicas: 1
+  replicas: 4
   revisionHistoryLimit: 10
   selector:
     matchLabels:
@@ -32,7 +32,7 @@ spec:
         app.kubernetes.io/instance: temporal
         app.kubernetes.io/name: temporal
         app.kubernetes.io/part-of: temporal
-        app.kubernetes.io/version: 1.17.2
+        app.kubernetes.io/version: 1.18.0
     spec:
       containers:
       - env:
@@ -47,8 +47,8 @@ spec:
           value: 0.0.0.0:8000
         envFrom:
         - configMapRef:
-            name: temporal-persistence-env
-        image: temporalio/server:1.17.2
+            name: temporal-env
+        image: temporalio/server:1.18.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 3

@@ -19,7 +19,7 @@ spec:
     spec:
       initContainers:
         - name: create-namespace
-          image: temporalio/admin-tools:1.17.2
+          image: temporalio/admin-tools:1.18.0
           env:
           - name: TEMPORAL_CLI_ADDRESS
             value: "temporal-frontend:7233"
@@ -39,7 +39,7 @@ spec:
         - name: TEMPORAL_TASK_QUEUE
           value: "benchmark"
         - name: TEMPORAL_WORKFLOW_TASK_POLLERS
-          value: "32"
-        - name: TEMPORAL_WORKFLOW_ACTIVITY_TASK_POLLERS
-          value: "16"
+          value: "128"
+        - name: TEMPORAL_ACTIVITY_TASK_POLLERS
+          value: "64"
       restartPolicy: Always

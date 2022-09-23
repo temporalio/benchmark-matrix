@@ -23,6 +23,7 @@ func main() {
 		// clusterType := cfg.Require("ClusterType")
 		// persistenceType := cfg.Require("PersistenceType")
 		persistenceInstance := cfg.Require("PersistenceInstance")
+		shards := cfg.Require("HistoryShards")
 		clusterName := ctx.Stack()
 
 		var k8sCluster *k8s.Provider
@@ -62,8 +63,6 @@ func main() {
 			return err
 		}
 
-		var persistenceEnvConfig pulumi.StringMapOutput
-
 		subnetGroup, err := rds.NewSubnetGroup(ctx, "persistence", &rds.SubnetGroupArgs{
 			SubnetIds: utils.GetStackStringArrayOutput(envStackRef, "PrivateSubnetIds"),
 		})
@@ -82,14 +81,16 @@ func main() {
 			return sg.ID().ToStringOutput()
 		}).(pulumi.StringOutput)
 
-		_, err = ec2.NewSecurityGroupRule(ctx, "persistence-node-access", &ec2.SecurityGroupRuleArgs{
-			Type:                  pulumi.String("ingress"),
-			FromPort:              pulumi.Int(5432),
-			ToPort:                pulumi.Int(5432),
-			Protocol:              pulumi.String("tcp"),
-			SecurityGroupId:       securityGroup.ID(),
-			SourceSecurityGroupId: nodeSecurityGroupID,
-		})
+		_, err = ec2.NewSecurityGroupRule(ctx, "persistence-node-access",
+			&ec2.SecurityGroupRuleArgs{
+				Type:                  pulumi.String("ingress"),
+				FromPort:              pulumi.Int(5432),
+				ToPort:                pulumi.Int(5432),
+				Protocol:              pulumi.String("tcp"),
+				SecurityGroupId:       securityGroup.ID(),
+				SourceSecurityGroupId: nodeSecurityGroupID,
+			},
+		)
 		if err != nil {
 			return err
 		}
@@ -110,20 +111,23 @@ func main() {
 		if err != nil {
 			return err
 		}
-		persistenceEnvConfig = pulumi.ToStringMapOutput(map[string]pulumi.StringOutput{
-			"DB":                pulumi.String("postgresql").ToStringOutput(),
-			"DB_PORT":           pulumi.String("5432").ToStringOutput(),
-			"POSTGRES_SEEDS":    db.Address,
-			"POSTGRES_USER":     pulumi.String("temporal").ToStringOutput(),
-			"POSTGRES_PWD":      pulumi.String("temporal").ToStringOutput(),
-			"DBNAME":            pulumi.String("temporal_persistence").ToStringOutput(),
-			"VISIBILITY_DBNAME": pulumi.String("temporal_visibility").ToStringOutput(),
-		})
+		persistenceEnvConfig := pulumi.StringMap{
+			"NUM_HISTORY_SHARDS": pulumi.String(shards),
+			"DB":                 pulumi.String("postgresql"),
+			"DB_PORT":            pulumi.String("5432"),
+			"SQL_MAX_CONNS":      pulumi.String("40"),
+			"SQL_MAX_IDLE_CONNS": pulumi.String("40"),
+			"POSTGRES_SEEDS":     db.Address,
+			"POSTGRES_USER":      pulumi.String("temporal"),
+			"POSTGRES_PWD":       pulumi.String("temporal"),
+			"DBNAME":             pulumi.String("temporal_persistence"),
+			"VISIBILITY_DBNAME":  pulumi.String("temporal_visibility"),
+		}.ToStringMapOutput()
 
-		persistenceConfig, err := corev1.NewConfigMap(ctx, "temporal-persistence-env",
+		persistenceConfig, err := corev1.NewConfigMap(ctx, "temporal-env",
 			&corev1.ConfigMapArgs{
 				Metadata: &metav1.ObjectMetaArgs{
-					Name: pulumi.String("temporal-persistence-env"),
+					Name: pulumi.String("temporal-env"),
 				},
 				Data: persistenceEnvConfig,
 			},

@@ -10,7 +10,7 @@ metadata:
   name: temporal-matching
 spec:
   progressDeadlineSeconds: 600
-  replicas: 2
+  replicas: 4
   revisionHistoryLimit: 10
   selector:
     matchLabels:

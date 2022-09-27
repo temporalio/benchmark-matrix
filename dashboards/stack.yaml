@@ -20,14 +20,14 @@ rows:
           datasource: grafanacloud-temporalbenchmarks-prom
           targets:
             - prometheus:
-                query: sum by (stack) (k6_vus{stack="$stack"})
+                query: sum(k6_vus{stack="$stack"})
                 legend: "VUs"
       - timeseries:
           title: Iterations
           datasource: grafanacloud-temporalbenchmarks-prom
           targets:
             - prometheus:
-                query: sum by (stack) (rate(k6_iteration_duration_count{stack="$stack"}[$__rate_interval]))
+                query: sum(rate(k6_iteration_duration_count{stack="$stack"}[$__rate_interval]))
                 legend: "iterations/sec"
 
   - name: Metering
@@ -37,7 +37,7 @@ rows:
           datasource: grafanacloud-temporalbenchmarks-prom
           targets:
             - prometheus:
-                query: sum by (stack) (rate(state_transition_count_sum{stack="$stack"}[$__rate_interval]))
+                query: sum(rate(state_transition_count_sum{stack="$stack"}[$__rate_interval]))
                 legend: "st/s"
 
   - name: Polling
@@ -47,7 +47,7 @@ rows:
           datasource: grafanacloud-temporalbenchmarks-prom
           targets:
             - prometheus:
-                query: histogram_quantile(0.95, sum by(stack, le) (rate(temporal_long_request_latency_bucket{stack="$stack",app_kubernetes_io_name="benchmark-workers",operation="PollWorkflowTaskQueue"}[$__rate_interval])))
+                query: histogram_quantile(0.95, sum by(le) (rate(temporal_long_request_latency_bucket{stack="$stack",app_kubernetes_io_name="benchmark-workers",operation="PollWorkflowTaskQueue"}[$__rate_interval])))
                 legend: p95
           axis:
             unit: s
@@ -56,7 +56,7 @@ rows:
           datasource: grafanacloud-temporalbenchmarks-prom
           targets:
             - prometheus:
-                query: histogram_quantile(0.95, sum by(stack, le) (rate(temporal_long_request_latency_bucket{stack="$stack",app_kubernetes_io_name="benchmark-workers",operation="PollActivityTaskQueue"}[$__rate_interval])))
+                query: histogram_quantile(0.95, sum by(le) (rate(temporal_long_request_latency_bucket{stack="$stack",app_kubernetes_io_name="benchmark-workers",operation="PollActivityTaskQueue"}[$__rate_interval])))
                 legend: p95
           axis:
             unit: s
@@ -79,14 +79,48 @@ rows:
   - name: Persistence
     panels:
       - timeseries:
-          title: Latency
+          title: Workflow Latency
           datasource: grafanacloud-temporalbenchmarks-prom
           targets:
             - prometheus:
-                query: histogram_quantile(0.95, sum by(operation, le) (rate(persistence_latency_bucket{stack="$stack"}[$__rate_interval])))
+                query: histogram_quantile(0.95, sum by(operation, le) (rate(persistence_latency_bucket{stack="$stack",operation=~".*Workflow.*"}[$__rate_interval])))
                 legend: "{{$operation}}"
           axis:
             unit: s
+      - timeseries:
+          title: Task Latency
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by(operation, le) (rate(persistence_latency_bucket{stack="$stack",operation=~".*Task.*"}[$__rate_interval])))
+                legend: "{{$operation}}"
+          axis:
+            unit: s
+      - timeseries:
+          title: Shard Latency
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by(operation, le) (rate(persistence_latency_bucket{stack="$stack",operation=~".*Shard.*"}[$__rate_interval])))
+                legend: "{{$operation}}"
+          axis:
+            unit: s
+      - timeseries:
+          title: Misc Latency
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by(operation, le) (rate(persistence_latency_bucket{stack="$stack",operation=~".*(Cluster|Namespace).*"}[$__rate_interval])))
+                legend: "{{$operation}}"
+          axis:
+            unit: s
+      - timeseries:
+          title: Errors
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: sum by(error_type) (rate(persistence_error_with_type{stack="$stack"}[$__rate_interval]))
+                legend: "{{$error_type}}"
   - name: Locking
     panels:
       - timeseries:

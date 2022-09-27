@@ -1,0 +1,32 @@
+title: Summary
+
+editable: true
+shared_crosshair: true
+time: [now-12h, now]
+
+rows:
+  - name: K6
+    panels:
+      - timeseries:
+          title: VUs
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: sum by (stack) (k6_vus)
+                legend: "{{$stack}}"
+      - timeseries:
+          title: Iterations
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: sum by (stack) (rate(k6_iteration_duration_count[$__rate_interval]))
+                legend: "{{$stack}}"
+  - name: Metering
+    panels:
+      - timeseries:
+          title: State Transitions
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: sum by (stack) (rate(state_transition_count_sum[$__rate_interval]))
+                legend: "{{$stack}}"

@@ -76,3 +76,34 @@ rows:
             - prometheus:
                 query: sum(rate(persistence_requests{stack="$stack",operation="CreateTask"}[$__rate_interval]))
                 legend: "tasks/s"
+  - name: Persistence
+    panels:
+      - timeseries:
+          title: Latency
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by(operation, le) (rate(persistence_latency_bucket{stack="$stack"}[$__rate_interval])))
+                legend: "{{$operation}}"
+          axis:
+            unit: s
+  - name: Locking
+    panels:
+      - timeseries:
+          title: Workflow Lock Latency
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by(le) (rate(cache_latency_bucket{stack="$stack",operation="HistoryCacheGetOrCreate"}[$__rate_interval])))
+                legend: p95
+          axis:
+            unit: s
+      - timeseries:
+          title: Shard Lock Latency
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by(le) (rate(lock_latency_bucket{stack="$stack",operation="ShardInfo"}[$__rate_interval])))
+                legend: p95
+          axis:
+            unit: s

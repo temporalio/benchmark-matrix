@@ -4,8 +4,3 @@ resources:
 - worker-deployment.yaml
 - matching-deployment.yaml
 - history-deployment.yaml
-configMapGenerator:
-- name: temporal-dynamic-config
-  namespace: default
-  files:
-  - dynamic_config.yaml

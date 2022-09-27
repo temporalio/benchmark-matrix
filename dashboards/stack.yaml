@@ -1,0 +1,78 @@
+title: Stack
+
+editable: true
+shared_crosshair: true
+auto_refresh: 30s
+time: [now-1h, now]
+
+variables:
+  - query:
+      name: stack
+      label: Stack
+      datasource: grafanacloud-temporalbenchmarks-prom
+      request: label_values(stack)
+
+rows:
+  - name: K6
+    panels:
+      - timeseries:
+          title: VUs
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: sum by (stack) (k6_vus{stack="$stack"})
+                legend: "VUs"
+      - timeseries:
+          title: Iterations
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: sum by (stack) (rate(k6_iteration_duration_count{stack="$stack"}[$__rate_interval]))
+                legend: "iterations/sec"
+
+  - name: Metering
+    panels:
+      - timeseries:
+          title: State Transitions
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: sum by (stack) (rate(state_transition_count_sum{stack="$stack"}[$__rate_interval]))
+                legend: "st/s"
+
+  - name: Polling
+    panels:
+      - timeseries:
+          title: Workflow Task Polling Latency
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by(stack, le) (rate(temporal_long_request_latency_bucket{stack="$stack",app_kubernetes_io_name="benchmark-workers",operation="PollWorkflowTaskQueue"}[$__rate_interval])))
+                legend: p95
+          axis:
+            unit: s
+      - timeseries:
+          title: Activity Polling Latency
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by(stack, le) (rate(temporal_long_request_latency_bucket{stack="$stack",app_kubernetes_io_name="benchmark-workers",operation="PollActivityTaskQueue"}[$__rate_interval])))
+                legend: p95
+          axis:
+            unit: s
+      - timeseries:
+          title: Poll Sync
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: sum by (task_type) (rate(poll_success_sync{stack="$stack"}[$__rate_interval])) / sum by (task_type) (rate(poll_success{stack="$stack"}[$__rate_interval]))
+                legend: "{{task_type}}"
+          axis:
+            unit: percentunit
+      - timeseries:
+          title: Task Creation
+          datasource: grafanacloud-temporalbenchmarks-prom
+          targets:
+            - prometheus:
+                query: sum(rate(persistence_requests{stack="$stack",operation="CreateTask"}[$__rate_interval]))
+                legend: "tasks/s"

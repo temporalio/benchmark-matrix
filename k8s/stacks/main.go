@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/pulumi/pulumi-aws/sdk/v5/go/aws/ec2"
 	"github.com/pulumi/pulumi-aws/sdk/v5/go/aws/rds"
@@ -11,6 +12,7 @@ import (
 	corev1 "github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/core/v1"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/kustomize"
 	metav1 "github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/meta/v1"
+	"github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/yaml"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 	"github.com/temporalio/temporal-benchmarks/utils"
@@ -20,13 +22,26 @@ func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
 		cfg := config.New(ctx, "")
 
-		// clusterType := cfg.Require("ClusterType")
-		// persistenceType := cfg.Require("PersistenceType")
-		persistenceInstance := cfg.Require("PersistenceInstance")
-		shards := cfg.Require("HistoryShards")
-		clusterName := ctx.Stack()
+		stackName := ctx.Stack()
 
-		var k8sCluster *k8s.Provider
+		persistenceInstance := cfg.Require("PersistenceInstance")
+		persistenceEngine := cfg.Require("PersistenceEngine")
+		persistenceEngineVersion := cfg.Require("PersistenceEngineVersion")
+		persistenceParameterGroupName := cfg.Require("PersistenceParameterGroupName")
+		var dbType string
+		var dbPort int
+		var dbPrefix string
+		if persistenceEngine == "postgres" {
+			dbType = "postgresql"
+			dbPort = 5432
+			dbPrefix = "POSTGRES"
+		} else {
+			dbType = "mysql"
+			dbPort = 3306
+			dbPrefix = "MYSQL"
+		}
+
+		shards := cfg.Require("HistoryShards")
 
 		envStackName := cfg.Require("EnvironmentStackName")
 		envStackRef, err := pulumi.NewStackReference(ctx, envStackName, nil)
@@ -34,22 +49,22 @@ func main() {
 			return err
 		}
 
-		cluster, err := eks.NewCluster(ctx, clusterName, &eks.ClusterArgs{
+		cluster, err := eks.NewCluster(ctx, stackName, &eks.ClusterArgs{
 			VpcId:                        utils.GetStackStringOutput(envStackRef, "VpcId"),
 			PublicSubnetIds:              utils.GetStackStringArrayOutput(envStackRef, "PublicSubnetIds"),
 			PrivateSubnetIds:             utils.GetStackStringArrayOutput(envStackRef, "PrivateSubnetIds"),
 			NodeAssociatePublicIpAddress: pulumi.Bool(false),
 			DesiredCapacity:              pulumi.Int(3),
+			InstanceType:                 pulumi.String("c6i.large"),
 			MinSize:                      pulumi.Int(3),
 			MaxSize:                      pulumi.Int(3),
 		})
 		if err != nil {
 			return err
 		}
-
 		ctx.Export("kubeconfig", pulumi.ToSecret(cluster.Kubeconfig))
 
-		k8sCluster, err = k8s.NewProvider(ctx, "eks", &k8s.ProviderArgs{
+		k8sCluster, err := k8s.NewProvider(ctx, "eks", &k8s.ProviderArgs{
 			Kubeconfig: cluster.Kubeconfig.ApplyT(
 				func(config interface{}) (string, error) {
 					b, err := json.Marshal(config)
@@ -84,8 +99,8 @@ func main() {
 		_, err = ec2.NewSecurityGroupRule(ctx, "persistence-node-access",
 			&ec2.SecurityGroupRuleArgs{
 				Type:                  pulumi.String("ingress"),
-				FromPort:              pulumi.Int(5432),
-				ToPort:                pulumi.Int(5432),
+				FromPort:              pulumi.Int(dbPort),
+				ToPort:                pulumi.Int(dbPort),
 				Protocol:              pulumi.String("tcp"),
 				SecurityGroupId:       securityGroup.ID(),
 				SourceSecurityGroupId: nodeSecurityGroupID,
@@ -96,11 +111,12 @@ func main() {
 		}
 
 		db, err := rds.NewInstance(ctx, "persistence", &rds.InstanceArgs{
+			IdentifierPrefix:    pulumi.Sprintf("persistence-%s-shards-", shards),
 			AllocatedStorage:    pulumi.Int(100),
-			Engine:              pulumi.String("postgres"),
-			EngineVersion:       pulumi.String("14.4"),
+			Engine:              pulumi.String(persistenceEngine),
+			EngineVersion:       pulumi.String(persistenceEngineVersion),
 			InstanceClass:       pulumi.String(persistenceInstance),
-			ParameterGroupName:  pulumi.String("default.postgres14"),
+			ParameterGroupName:  pulumi.String(persistenceParameterGroupName),
 			Username:            pulumi.String("temporal"),
 			Password:            pulumi.String("temporal"),
 			SkipFinalSnapshot:   pulumi.Bool(true),
@@ -111,17 +127,19 @@ func main() {
 		if err != nil {
 			return err
 		}
+
 		persistenceEnvConfig := pulumi.StringMap{
-			"NUM_HISTORY_SHARDS": pulumi.String(shards),
-			"DB":                 pulumi.String("postgresql"),
-			"DB_PORT":            pulumi.String("5432"),
-			"SQL_MAX_CONNS":      pulumi.String("40"),
-			"SQL_MAX_IDLE_CONNS": pulumi.String("40"),
-			"POSTGRES_SEEDS":     db.Address,
-			"POSTGRES_USER":      pulumi.String("temporal"),
-			"POSTGRES_PWD":       pulumi.String("temporal"),
-			"DBNAME":             pulumi.String("temporal_persistence"),
-			"VISIBILITY_DBNAME":  pulumi.String("temporal_visibility"),
+			"NUM_HISTORY_SHARDS":              pulumi.String(shards),
+			"DB":                              pulumi.String(dbType),
+			"DB_PORT":                         pulumi.Sprintf("%d", dbPort),
+			"SQL_MAX_CONNS":                   pulumi.String("40"),
+			"SQL_MAX_IDLE_CONNS":              pulumi.String("40"),
+			fmt.Sprintf("%s_SEEDS", dbPrefix): db.Address,
+			fmt.Sprintf("%s_USER", dbPrefix):  pulumi.String("temporal"),
+			fmt.Sprintf("%s_PWD", dbPrefix):   pulumi.String("temporal"),
+			"DBNAME":                          pulumi.String("temporal_persistence"),
+			"VISIBILITY_DBNAME":               pulumi.String("temporal_visibility"),
+			"MYSQL_TX_ISOLATION_COMPAT":       pulumi.String("true"),
 		}.ToStringMapOutput()
 
 		persistenceConfig, err := corev1.NewConfigMap(ctx, "temporal-env",
@@ -139,11 +157,34 @@ func main() {
 			return err
 		}
 
-		kustomizeDirectory := cfg.Require("KustomizeDirectory")
-
-		temporalSystem, err := kustomize.NewDirectory(ctx, kustomizeDirectory,
-			kustomize.DirectoryArgs{
-				Directory: pulumi.String(kustomizeDirectory),
+		autosetup, err := batchv1.NewJob(ctx, "temporal-autosetup",
+			&batchv1.JobArgs{
+				Metadata: &metav1.ObjectMetaArgs{
+					Name: pulumi.String("temporal-autosetup"),
+				},
+				Spec: &batchv1.JobSpecArgs{
+					BackoffLimit: pulumi.Int(3),
+					Template: &corev1.PodTemplateSpecArgs{
+						Spec: &corev1.PodSpecArgs{
+							Containers: corev1.ContainerArray{
+								&corev1.ContainerArgs{
+									Name:            pulumi.String("autosetup"),
+									Image:           pulumi.String("temporalio/auto-setup:1.18.0"),
+									ImagePullPolicy: pulumi.String("IfNotPresent"),
+									Command:         pulumi.ToStringArray([]string{"/etc/temporal/auto-setup.sh"}),
+									EnvFrom: corev1.EnvFromSourceArray{
+										corev1.EnvFromSourceArgs{
+											ConfigMapRef: corev1.ConfigMapEnvSourceArgs{
+												Name: persistenceConfig.Metadata.Name(),
+											},
+										},
+									},
+								},
+							},
+							RestartPolicy: pulumi.String("Never"),
+						},
+					},
+				},
 			},
 			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
 				"kubernetes": k8sCluster,
@@ -154,12 +195,55 @@ func main() {
 			return err
 		}
 
+		dynamicConfig, err := corev1.NewConfigMap(ctx, "temporal-dynamic-config",
+			&corev1.ConfigMapArgs{
+				Metadata: &metav1.ObjectMetaArgs{
+					Name: pulumi.String("temporal-dynamic-config"),
+				},
+				Data: pulumi.StringMap{
+					"dynamic_config.yaml": pulumi.String(cfg.Require("DynamicConfig")),
+				},
+			},
+			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
+				"kubernetes": k8sCluster,
+			}),
+		)
+		if err != nil {
+			return err
+		}
+
+		temporalSystem, err := kustomize.NewDirectory(ctx, "benchmark",
+			kustomize.DirectoryArgs{
+				Directory: pulumi.String("../overlays/benchmark"),
+				Transformations: []yaml.Transformation{
+					// To improve metric cardinality, swap deployments for statefulsets
+					// This means we will get predictable pod names.
+					// As we won't make adjustments to deployments we don't need their power here anyway.
+					func(state map[string]interface{}, opts ...pulumi.ResourceOption) {
+						if state["kind"] == "Deployment" {
+							state["kind"] = "StatefulSet"
+						}
+					},
+				},
+			},
+			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
+				"kubernetes": k8sCluster,
+			}),
+			pulumi.DependsOn([]pulumi.Resource{persistenceConfig, dynamicConfig, autosetup}),
+		)
+		if err != nil {
+			return err
+		}
+
 		benchmarkConfig, err := corev1.NewConfigMap(ctx, "benchmark-config",
 			&corev1.ConfigMapArgs{
 				Metadata: &metav1.ObjectMetaArgs{
 					Name: pulumi.String("benchmark-config"),
 				},
-				Data: pulumi.ToStringMap(map[string]string{"CLUSTER_NAME": clusterName}),
+				Data: pulumi.ToStringMap(map[string]string{
+					"STACK_NAME": stackName,
+					"SHARDS":     shards,
+				}),
 			},
 			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
 				"kubernetes": k8sCluster,
@@ -208,11 +292,13 @@ func main() {
 									Name:            pulumi.String("k6"),
 									Image:           pulumi.String("ghcr.io/temporalio/xk6-temporal:main"),
 									ImagePullPolicy: pulumi.String("Always"),
-									Command: pulumi.StringArray{
-										pulumi.String("k6"),
-										pulumi.String("run"),
-										pulumi.String("/etc/benchmark-scripts/ramp_up.js"),
-									},
+									Command: pulumi.ToStringArray([]string{
+										"k6",
+										"run",
+										"--tag",
+										fmt.Sprintf("stack=%s", stackName),
+										"/etc/benchmark-scripts/ramp_up.js",
+									}),
 									Env: corev1.EnvVarArray{
 										corev1.EnvVarArgs{
 											Name:  pulumi.String("TEMPORAL_GRPC_ENDPOINT"),

@@ -1,6 +1,0 @@
-matching.numTaskqueueReadPartitions:
-- value: 8
-  constraints: {}
-matching.numTaskqueueWritePartitions:
-- value: 8
-  constraints: {}

@@ -8,9 +8,5 @@ configMapGenerator:
 - name: grafana-agent
   files:
   - agent.yaml=agent-config.yaml
-- name: grafana-agent-logs
-  files:
-  - agent.yaml=agent-logs-config.yaml
 resources:
 - agent.yaml
-- agent-logs.yaml

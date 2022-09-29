@@ -14,7 +14,11 @@ import (
 
 func main() {
 	ctx := context.Background()
-	client := grabana.NewClient(&http.Client{}, os.Getenv("GRAFANA_HOST"), grabana.WithAPIToken(os.Getenv("GRAFANA_API_TOKEN")))
+	options := []grabana.Option{}
+	if os.Getenv("GRAFANA_API_TOKEN") != "" {
+		options = append(options, grabana.WithAPIToken(os.Getenv("GRAFANA_API_TOKEN")))
+	}
+	client := grabana.NewClient(&http.Client{}, os.Getenv("GRAFANA_HOST"), options...)
 
 	folder, err := client.FindOrCreateFolder(ctx, "Benchmarks")
 	if err != nil {

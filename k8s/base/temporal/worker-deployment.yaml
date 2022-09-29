@@ -24,9 +24,6 @@ spec:
     type: RollingUpdate
   template:
     metadata:
-      annotations:
-        prometheus.io/scrape: 'true'
-        prometheus.io/port: '8000'
       labels:
         app.kubernetes.io/component: worker
         app.kubernetes.io/instance: temporal
@@ -54,8 +51,11 @@ spec:
         imagePullPolicy: IfNotPresent
         name: temporal
         ports:
-        - containerPort: 7239
-          name: rpc
+        - name: rpc
+          containerPort: 7239
+          protocol: TCP
+        - name: metrics
+          containerPort: 8000
           protocol: TCP
         resources: {}
         terminationMessagePath: /dev/termination-log

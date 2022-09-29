@@ -8,6 +8,6 @@ config:
   temporal-benchmarks-k8s:HistoryShards: 2048
   temporal-benchmarks-k8s:DynamicConfig: |
     matching.numTaskqueueReadPartitions:
-    - value: 8
+    - value: 4
     matching.numTaskqueueWritePartitions:
-    - value: 8
+    - value: 4

@@ -25,9 +25,6 @@ spec:
     type: RollingUpdate
   template:
     metadata:
-      annotations:
-        prometheus.io/scrape: 'true'
-        prometheus.io/port: '8000'
       labels:
         app.kubernetes.io/component: frontend
         app.kubernetes.io/instance: temporal
@@ -61,8 +58,11 @@ spec:
           timeoutSeconds: 1
         name: temporal
         ports:
-        - containerPort: 7233
-          name: rpc
+        - name: rpc
+          containerPort: 7233
+          protocol: TCP
+        - name: metrics
+          containerPort: 8000
           protocol: TCP
         resources: {}
         terminationMessagePath: /dev/termination-log

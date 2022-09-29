@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/name: benchmark-workers
+    app.kubernetes.io/component: monitoring
+  name: benchmark-monitoring
+spec:
+  type: ClusterIP
+  clusterIP: None
+  internalTrafficPolicy: Cluster
+  publishNotReadyAddresses: true
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: benchmark-workers

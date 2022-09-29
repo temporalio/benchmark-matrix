@@ -12,7 +12,6 @@ import (
 	corev1 "github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/core/v1"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/kustomize"
 	metav1 "github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/meta/v1"
-	"github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/yaml"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 	"github.com/temporalio/temporal-benchmarks/utils"
@@ -215,16 +214,6 @@ func main() {
 		temporalSystem, err := kustomize.NewDirectory(ctx, "benchmark",
 			kustomize.DirectoryArgs{
 				Directory: pulumi.String("../overlays/benchmark"),
-				Transformations: []yaml.Transformation{
-					// To improve metric cardinality, swap deployments for statefulsets
-					// This means we will get predictable pod names.
-					// As we won't make adjustments to deployments we don't need their power here anyway.
-					func(state map[string]interface{}, opts ...pulumi.ResourceOption) {
-						if state["kind"] == "Deployment" {
-							state["kind"] = "StatefulSet"
-						}
-					},
-				},
 			},
 			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
 				"kubernetes": k8sCluster,
@@ -235,35 +224,23 @@ func main() {
 			return err
 		}
 
-		benchmarkConfig, err := corev1.NewConfigMap(ctx, "benchmark-config",
-			&corev1.ConfigMapArgs{
-				Metadata: &metav1.ObjectMetaArgs{
-					Name: pulumi.String("benchmark-config"),
-				},
-				Data: pulumi.ToStringMap(map[string]string{
-					"STACK_NAME": stackName,
-					"SHARDS":     shards,
-				}),
-			},
-			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
-				"kubernetes": k8sCluster,
-			}),
-		)
-		if err != nil {
-			return err
-		}
-
-		kubeStateMetrics, err := kustomize.NewDirectory(ctx, "kube-state-metrics",
-			kustomize.DirectoryArgs{
-				Directory: pulumi.String("https://github.com/kubernetes/kube-state-metrics"),
-			},
-			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
-				"kubernetes": k8sCluster,
-			}),
-		)
-		if err != nil {
-			return err
-		}
+		// benchmarkConfig, err := corev1.NewConfigMap(ctx, "benchmark-config",
+		// 	&corev1.ConfigMapArgs{
+		// 		Metadata: &metav1.ObjectMetaArgs{
+		// 			Name: pulumi.String("benchmark-config"),
+		// 		},
+		// 		Data: pulumi.ToStringMap(map[string]string{
+		// 			"STACK_NAME": stackName,
+		// 			"SHARDS":     shards,
+		// 		}),
+		// 	},
+		// 	pulumi.ProviderMap(map[string]pulumi.ProviderResource{
+		// 		"kubernetes": k8sCluster,
+		// 	}),
+		// )
+		// if err != nil {
+		// 	return err
+		// }
 
 		monitoringSystem, err := kustomize.NewDirectory(ctx, "../monitoring",
 			kustomize.DirectoryArgs{
@@ -272,7 +249,6 @@ func main() {
 			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
 				"kubernetes": k8sCluster,
 			}),
-			pulumi.DependsOn([]pulumi.Resource{kubeStateMetrics, benchmarkConfig}),
 		)
 		if err != nil {
 			return err
@@ -295,8 +271,6 @@ func main() {
 									Command: pulumi.ToStringArray([]string{
 										"k6",
 										"run",
-										"--tag",
-										fmt.Sprintf("stack=%s", stackName),
 										"/etc/benchmark-scripts/ramp_up.js",
 									}),
 									Env: corev1.EnvVarArray{
@@ -304,12 +278,13 @@ func main() {
 											Name:  pulumi.String("TEMPORAL_GRPC_ENDPOINT"),
 											Value: pulumi.String("temporal-frontend:7233"),
 										},
-									},
-									EnvFrom: corev1.EnvFromSourceArray{
-										corev1.EnvFromSourceArgs{
-											SecretRef: corev1.SecretEnvSourceArgs{
-												Name: pulumi.String("monitoring-env"),
-											},
+										corev1.EnvVarArgs{
+											Name:  pulumi.String("K6_OUT"),
+											Value: pulumi.String("output-prometheus-remote"),
+										},
+										corev1.EnvVarArgs{
+											Name:  pulumi.String("K6_PROMETHEUS_REMOTE_URL"),
+											Value: pulumi.String("http://prometheus-k8s.monitoring.svc.cluster.local:9090/api/v1/write"),
 										},
 									},
 									VolumeMounts: corev1.VolumeMountArray{

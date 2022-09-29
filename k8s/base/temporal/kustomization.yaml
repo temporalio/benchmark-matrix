@@ -4,3 +4,5 @@ resources:
 - worker-deployment.yaml
 - matching-deployment.yaml
 - history-deployment.yaml
+- monitoring-service.yaml
+- service-monitor.yaml

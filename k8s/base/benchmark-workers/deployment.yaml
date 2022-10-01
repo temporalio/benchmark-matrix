@@ -24,7 +24,7 @@ spec:
           - name: TEMPORAL_CLI_ADDRESS
             value: "temporal-frontend:7233"
           command: ["bash", "-c"]
-          args: ["tctl --namespace default namespace register || tctl --namespace default namespace describe"]
+          args: ["tctl config set version 2 && tctl namespace register default || tctl namespace describe default"]
       containers:
       - image: ghcr.io/temporalio/benchmark-workers:main
         imagePullPolicy: Always

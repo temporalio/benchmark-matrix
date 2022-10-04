@@ -1,6 +1,0 @@
-generatorOptions:
-  disableNameSuffixHash: true
-configMapGenerator:
-- name: benchmark-scripts
-  files:
-  - ramp_up.js

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -16,6 +17,19 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 	"github.com/temporalio/temporal-benchmarks/utils"
 )
+
+func transformKubeconfig(config pulumi.AnyOutput) pulumi.StringOutput {
+	return config.ApplyT(
+		func(config interface{}) (string, error) {
+			b, err := json.Marshal(config)
+			if err != nil {
+				return "", err
+			}
+
+			return string(b), nil
+		},
+	).(pulumi.StringOutput)
+}
 
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
@@ -61,18 +75,25 @@ func main() {
 		if err != nil {
 			return err
 		}
-		ctx.Export("kubeconfig", pulumi.ToSecret(cluster.Kubeconfig))
+		cluster.Kubeconfig.ApplyT(func(kc string) {
+			ctx.Export("kubeconfig", pulumi.String(base64.StdEncoding.EncodeToString([]byte(kc))))
+		})
 
 		k8sCluster, err := k8s.NewProvider(ctx, "eks", &k8s.ProviderArgs{
-			Kubeconfig: cluster.Kubeconfig.ApplyT(
-				func(config interface{}) (string, error) {
-					b, err := json.Marshal(config)
-					if err != nil {
-						return "", err
-					}
-					return string(b), nil
-				}).(pulumi.StringOutput),
+			Kubeconfig: transformKubeconfig(cluster.Kubeconfig),
 		})
+		if err != nil {
+			return err
+		}
+
+		_, err = kustomize.NewDirectory(ctx, "../monitoring",
+			kustomize.DirectoryArgs{
+				Directory: pulumi.String("../monitoring"),
+			},
+			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
+				"kubernetes": k8sCluster,
+			}),
+		)
 		if err != nil {
 			return err
 		}
@@ -211,7 +232,7 @@ func main() {
 			return err
 		}
 
-		temporalSystem, err := kustomize.NewDirectory(ctx, "benchmark",
+		_, err = kustomize.NewDirectory(ctx, "benchmark",
 			kustomize.DirectoryArgs{
 				Directory: pulumi.String("../overlays/benchmark"),
 			},
@@ -219,104 +240,6 @@ func main() {
 				"kubernetes": k8sCluster,
 			}),
 			pulumi.DependsOn([]pulumi.Resource{persistenceConfig, dynamicConfig, autosetup}),
-		)
-		if err != nil {
-			return err
-		}
-
-		// benchmarkConfig, err := corev1.NewConfigMap(ctx, "benchmark-config",
-		// 	&corev1.ConfigMapArgs{
-		// 		Metadata: &metav1.ObjectMetaArgs{
-		// 			Name: pulumi.String("benchmark-config"),
-		// 		},
-		// 		Data: pulumi.ToStringMap(map[string]string{
-		// 			"STACK_NAME": stackName,
-		// 			"SHARDS":     shards,
-		// 		}),
-		// 	},
-		// 	pulumi.ProviderMap(map[string]pulumi.ProviderResource{
-		// 		"kubernetes": k8sCluster,
-		// 	}),
-		// )
-		// if err != nil {
-		// 	return err
-		// }
-
-		monitoringSystem, err := kustomize.NewDirectory(ctx, "../monitoring",
-			kustomize.DirectoryArgs{
-				Directory: pulumi.String("../monitoring"),
-			},
-			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
-				"kubernetes": k8sCluster,
-			}),
-		)
-		if err != nil {
-			return err
-		}
-
-		_, err = batchv1.NewJob(ctx, "benchmark-ramp-up",
-			&batchv1.JobArgs{
-				Metadata: &metav1.ObjectMetaArgs{
-					Name: pulumi.String("benchmark-ramp-up"),
-				},
-				Spec: &batchv1.JobSpecArgs{
-					BackoffLimit: pulumi.Int(3),
-					Template: &corev1.PodTemplateSpecArgs{
-						Spec: &corev1.PodSpecArgs{
-							Containers: corev1.ContainerArray{
-								&corev1.ContainerArgs{
-									Name:            pulumi.String("k6"),
-									Image:           pulumi.String("ghcr.io/temporalio/xk6-temporal:main"),
-									ImagePullPolicy: pulumi.String("Always"),
-									Command: pulumi.ToStringArray([]string{
-										"k6",
-										"run",
-										"/etc/benchmark-scripts/ramp_up.js",
-									}),
-									Env: corev1.EnvVarArray{
-										corev1.EnvVarArgs{
-											Name:  pulumi.String("TEMPORAL_GRPC_ENDPOINT"),
-											Value: pulumi.String("temporal-frontend:7233"),
-										},
-										corev1.EnvVarArgs{
-											Name:  pulumi.String("K6_OUT"),
-											Value: pulumi.String("output-prometheus-remote"),
-										},
-										corev1.EnvVarArgs{
-											Name:  pulumi.String("K6_PROMETHEUS_REMOTE_URL"),
-											Value: pulumi.String("http://prometheus-k8s.monitoring.svc.cluster.local:9090/api/v1/write"),
-										},
-									},
-									VolumeMounts: corev1.VolumeMountArray{
-										corev1.VolumeMountArgs{
-											Name:      pulumi.String("benchmark-scripts"),
-											MountPath: pulumi.String("/etc/benchmark-scripts"),
-										},
-									},
-								},
-							},
-							Volumes: corev1.VolumeArray{
-								corev1.VolumeArgs{
-									Name: pulumi.String("benchmark-scripts"),
-									ConfigMap: corev1.ConfigMapVolumeSourceArgs{
-										Name: pulumi.String("benchmark-scripts"),
-										Items: corev1.KeyToPathArray{
-											corev1.KeyToPathArgs{Key: pulumi.String("ramp_up.js"), Path: pulumi.String("ramp_up.js")},
-										},
-									},
-								},
-							},
-							RestartPolicy: pulumi.String("Never"),
-						},
-					},
-				},
-			},
-			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
-				"kubernetes": k8sCluster,
-			}),
-			pulumi.DependsOnInputs(utils.KustomizeReady(temporalSystem)),
-			pulumi.DependsOnInputs(utils.KustomizeReady(monitoringSystem)),
-			pulumi.Timeouts(&pulumi.CustomTimeouts{Create: "1h"}),
 		)
 		if err != nil {
 			return err

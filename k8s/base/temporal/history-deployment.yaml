@@ -63,7 +63,13 @@ spec:
         - name: metrics
           containerPort: 8000
           protocol: TCP
-        resources: {}
+        resources:
+          requests:
+            cpu: 200m
+            memory: 2Gi
+          limits:
+            cpu: 300m
+            memory: 3Gi
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:

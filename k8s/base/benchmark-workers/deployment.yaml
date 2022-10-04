@@ -46,4 +46,11 @@ spec:
         - name: metrics
           containerPort: 8000
           protocol: TCP
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
       restartPolicy: Always

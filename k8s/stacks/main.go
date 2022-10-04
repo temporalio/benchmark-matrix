@@ -67,20 +67,29 @@ func main() {
 			PublicSubnetIds:              utils.GetStackStringArrayOutput(envStackRef, "PublicSubnetIds"),
 			PrivateSubnetIds:             utils.GetStackStringArrayOutput(envStackRef, "PrivateSubnetIds"),
 			NodeAssociatePublicIpAddress: pulumi.Bool(false),
-			DesiredCapacity:              pulumi.Int(3),
+			DesiredCapacity:              pulumi.Int(5),
 			InstanceType:                 pulumi.String("c6i.large"),
-			MinSize:                      pulumi.Int(3),
-			MaxSize:                      pulumi.Int(3),
+			MinSize:                      pulumi.Int(5),
+			MaxSize:                      pulumi.Int(5),
 		})
 		if err != nil {
 			return err
 		}
-		cluster.Kubeconfig.ApplyT(func(kc string) {
-			ctx.Export("kubeconfig", pulumi.String(base64.StdEncoding.EncodeToString([]byte(kc))))
-		})
+
+		kubeconfig := transformKubeconfig(cluster.Kubeconfig)
+		kubeconfigOut := kubeconfig.ApplyT(func(kc interface{}) (string, error) {
+			s, ok := kc.(string)
+			if !ok {
+				return "", fmt.Errorf("kubeconfig: unexpected type: %v", kc)
+			}
+
+			return base64.StdEncoding.EncodeToString([]byte(s)), nil
+		}).(pulumi.StringOutput)
+
+		ctx.Export("kubeconfig", kubeconfigOut)
 
 		k8sCluster, err := k8s.NewProvider(ctx, "eks", &k8s.ProviderArgs{
-			Kubeconfig: transformKubeconfig(cluster.Kubeconfig),
+			Kubeconfig: kubeconfig,
 		})
 		if err != nil {
 			return err

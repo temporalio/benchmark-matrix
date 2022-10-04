@@ -6,7 +6,7 @@ jobs:
     name: Run benchmarks
     strategy:
       matrix:
-        stack: [eks-rds-postgres-m6i-large,eks-rds-postgres-m6i-2xlarge]
+        stack: [eks-rds-postgres-m6i-large]
     runs-on: ubuntu-latest
     permissions:
       id-token: write

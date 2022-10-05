@@ -43,7 +43,6 @@ jobs:
             --
             k6 run - < benchmarks/ramp_up.js
       - uses: pulumi/actions@v3
-        if: always()
         with:
           work-dir: k8s/stacks
           command: destroy

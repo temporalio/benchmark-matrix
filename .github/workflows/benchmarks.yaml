@@ -33,15 +33,15 @@ jobs:
       - uses: ianbelcher/eks-kubectl-action@master
         with:
           cluster_name: ${{ steps.pulumi-up.outputs.cluster-name }}
-          args: |
-            run k6 --rm -i \
-              --restart Never \
-              --image ghcr.io/temporalio/xk6-temporal:main \
-              --env TEMPORAL_GRPC_ENDPOINT=temporal-frontend:7233 \
-              --env K6_OUT=output-prometheus-remote \
-              --env K6_PROMETHEUS_REMOTE_URL=http://prometheus-k8s.monitoring.svc.cluster.local/api/v1/write \
-              -- \
-              k6 run - < benchmarks/ramp_up.js
+          args: >
+            run k6 --rm -i
+            --restart Never
+            --image ghcr.io/temporalio/xk6-temporal:main
+            --env TEMPORAL_GRPC_ENDPOINT=temporal-frontend:7233
+            --env K6_OUT=output-prometheus-remote
+            --env K6_PROMETHEUS_REMOTE_URL=http://prometheus-k8s.monitoring.svc.cluster.local/api/v1/write
+            --
+            k6 run - < benchmarks/ramp_up.js
       - uses: pulumi/actions@v3
         if: always()
         with:

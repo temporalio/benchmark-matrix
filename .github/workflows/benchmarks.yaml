@@ -30,10 +30,9 @@ jobs:
           stack-name: ${{ matrix.stack }}
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}
-      - uses: actions-hub/kubectl@master
-        env:
-          KUBE_CONFIG: ${{ steps.pulumi-up.outputs.kubeconfig }}
+      - uses: ianbelcher/eks-kubectl-action@master
         with:
+          cluster_name: ${{ steps.pulumi-up.outputs.cluster-name }}
           args: |
             run k6 --rm -i
               --restart Never

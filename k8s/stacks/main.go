@@ -76,6 +76,8 @@ func main() {
 			return err
 		}
 
+		ctx.Export("cluster-name", cluster.EksCluster.Name())
+
 		kubeconfig := transformKubeconfig(cluster.Kubeconfig)
 		kubeconfigOut := kubeconfig.ApplyT(func(kc interface{}) (string, error) {
 			s, ok := kc.(string)

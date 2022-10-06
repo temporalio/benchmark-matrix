@@ -5,6 +5,7 @@ jobs:
   benchmarks:
     name: Run benchmarks
     strategy:
+      fail-fast: false
       matrix:
         stack: [eks-rds-postgres-m6i-large,eks-rds-postgres-m6i-2xlarge]
     runs-on: ubuntu-latest

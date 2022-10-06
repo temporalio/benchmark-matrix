@@ -30,10 +30,11 @@ jobs:
           stack-name: ${{ matrix.stack }}
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}
-      - uses: ianbelcher/eks-kubectl-action@master
+      - uses: robholland/eks-kubectl-action@rh-stdin
         id: run-benchmark
         with:
           cluster_name: ${{ steps.pulumi-up.outputs.cluster-name }}
+          stdin: benchmarks/ramp_up.js
           args: >
             run k6 -i --restart Never
             --image ghcr.io/temporalio/xk6-temporal:main
@@ -41,7 +42,7 @@ jobs:
             --env K6_OUT=output-prometheus-remote
             --env K6_PROMETHEUS_REMOTE_URL=http://prometheus-k8s.monitoring.svc.cluster.local/api/v1/write
             --
-            k6 run - < benchmarks/ramp_up.js
+            k6 run -
       - run: echo "${{ steps.run-benchmark.outputs.kubectl-out }}"
       - uses: pulumi/actions@v3
         with:

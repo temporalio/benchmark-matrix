@@ -40,7 +40,7 @@ rows:
           datasource: prometheus
           targets:
             - prometheus:
-                query: histogram_quantile(0.95, sum by(le) (rate(temporal_long_request_latency_bucket{namespace="default",operation="PollWorkflowTaskQueue"}[$__rate_interval])))
+                query: histogram_quantile(0.95, sum by(le) (rate(temporal_long_request_latency_bucket{job="benchmark-monitoring",namespace="default",operation="PollWorkflowTaskQueue"}[$__rate_interval])))
                 legend: p95
           axis:
             unit: s
@@ -49,7 +49,7 @@ rows:
           datasource: prometheus
           targets:
             - prometheus:
-                query: histogram_quantile(0.95, sum by(le) (rate(temporal_workflow_task_schedule_to_start_latency_bucket{namespace="default"}[$__rate_interval])))
+                query: histogram_quantile(0.95, sum by(le) (rate(temporal_workflow_task_schedule_to_start_latency_bucket{job="benchmark-monitoring",namespace="default"}[$__rate_interval])))
                 legend: p95
           axis:
             unit: s
@@ -58,7 +58,7 @@ rows:
           datasource: prometheus
           targets:
             - prometheus:
-                query: histogram_quantile(0.95, sum by(le) (rate(temporal_long_request_latency_bucket{namespace="default",operation="PollActivityTaskQueue"}[$__rate_interval])))
+                query: histogram_quantile(0.95, sum by(le) (rate(temporal_long_request_latency_bucket{job="benchmark-monitoring",namespace="default",operation="PollActivityTaskQueue"}[$__rate_interval])))
                 legend: p95
           axis:
             unit: s
@@ -67,7 +67,7 @@ rows:
           datasource: prometheus
           targets:
             - prometheus:
-                query: histogram_quantile(0.95, sum by(le) (rate(temporal_activity_schedule_to_start_latency_bucket{namespace="default"}[$__rate_interval])))
+                query: histogram_quantile(0.95, sum by(le) (rate(temporal_activity_schedule_to_start_latency_bucket{job="benchmark-monitoring",namespace="default"}[$__rate_interval])))
                 legend: p95
           axis:
             unit: s
@@ -108,7 +108,7 @@ rows:
           datasource: prometheus
           targets:
             - prometheus:
-                query: min by (worker_type) (temporal_worker_task_slots_available{namespace="default"})
+                query: sum by (worker_type) (temporal_worker_task_slots_available{job="benchmark-monitoring",namespace="default"})
                 legend: "{{$worker_type}}"
   - name: Persistence
     panels:

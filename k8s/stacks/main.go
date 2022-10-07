@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -79,16 +78,8 @@ func main() {
 		ctx.Export("cluster-name", cluster.EksCluster.Name())
 
 		kubeconfig := transformKubeconfig(cluster.Kubeconfig)
-		kubeconfigOut := kubeconfig.ApplyT(func(kc interface{}) (string, error) {
-			s, ok := kc.(string)
-			if !ok {
-				return "", fmt.Errorf("kubeconfig: unexpected type: %v", kc)
-			}
 
-			return base64.StdEncoding.EncodeToString([]byte(s)), nil
-		}).(pulumi.StringOutput)
-
-		ctx.Export("kubeconfig", kubeconfigOut)
+		ctx.Export("kubeconfig", kubeconfig)
 
 		k8sCluster, err := k8s.NewProvider(ctx, "eks", &k8s.ProviderArgs{
 			Kubeconfig: kubeconfig,

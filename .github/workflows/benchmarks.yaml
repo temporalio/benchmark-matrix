@@ -31,7 +31,7 @@ jobs:
           stack-name: ${{ matrix.stack }}
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}
-      - uses: robholland/eks-kubectl-action@master
+      - uses: ianbelcher/eks-kubectl-action@master
         id: run-benchmark
         with:
           cluster_name: ${{ steps.pulumi-up.outputs.cluster-name }}
@@ -41,9 +41,21 @@ jobs:
             --image ghcr.io/temporalio/xk6-temporal:main
             --env TEMPORAL_GRPC_ENDPOINT=temporal-frontend:7233
             --env K6_OUT=output-prometheus-remote
-            --env K6_PROMETHEUS_REMOTE_URL=http://prometheus-k8s.monitoring.svc.cluster.local/api/v1/write
+            --env K6_PROMETHEUS_REMOTE_URL=http://prometheus-k8s.monitoring.svc.cluster.local:9090/api/v1/write
             --
             k6 run -
+      - uses: ianbelcher/eks-kubectl-action@master
+        id: sts-metric-report
+        with:
+          cluster_name: ${{ steps.pulumi-up.outputs.cluster-name }}
+          args: >
+            run sts-metric-report-${{ github.run_attempt }} -i --restart Never
+            --image ghcr.io/nalbury/promql-cli:main
+            --
+            --host http://prometheus-k8s.monitoring.svc.cluster.local:9090/
+            --output json
+            'max_over_time(sum(rate(state_transition_count_sum{namespace="default"}[1m])) [24h:2m])'
+      - run: "echo 'Max State Transitions: ${{ steps.sts-metric-report.outputs.kubectl }}'"
       - uses: pulumi/actions@v3
         with:
           work-dir: k8s/stacks

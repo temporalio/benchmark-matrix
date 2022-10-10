@@ -54,7 +54,7 @@ jobs:
             --
             --host http://prometheus-k8s.monitoring.svc.cluster.local:9090/
             --output csv
-            'max_over_time(sum(rate(state_transition_count_sum{namespace="default"}[1m]))[24h:2m])'
+            max_over_time(sum(rate(state_transition_count_sum{namespace="default"}[1m]))[24h:2m])
       - run: "echo 'Max State Transitions: ${{ steps.sts-metric-report.outputs.kubectl }}'"
       - uses: pulumi/actions@v3
         with:

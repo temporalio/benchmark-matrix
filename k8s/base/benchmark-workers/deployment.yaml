@@ -38,10 +38,9 @@ spec:
           value: "default"
         - name: TEMPORAL_TASK_QUEUE
           value: "benchmark"
-        - name: TEMPORAL_WORKFLOW_TASK_POLLERS
-          value: "256"
-        - name: TEMPORAL_ACTIVITY_TASK_POLLERS
-          value: "128"
+        envFrom:
+        - configMapRef:
+            name: benchmark-worker-env          
         ports:
         - name: metrics
           containerPort: 8000

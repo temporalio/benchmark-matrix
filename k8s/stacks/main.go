@@ -12,6 +12,7 @@ import (
 	corev1 "github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/core/v1"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/kustomize"
 	metav1 "github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/meta/v1"
+	"github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes/yaml"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 	"github.com/temporalio/temporal-benchmarks/utils"
@@ -66,10 +67,10 @@ func main() {
 			PublicSubnetIds:              utils.GetStackStringArrayOutput(envStackRef, "PublicSubnetIds"),
 			PrivateSubnetIds:             utils.GetStackStringArrayOutput(envStackRef, "PrivateSubnetIds"),
 			NodeAssociatePublicIpAddress: pulumi.Bool(false),
-			DesiredCapacity:              pulumi.Int(5),
+			DesiredCapacity:              pulumi.Int(6),
 			InstanceType:                 pulumi.String("c6i.large"),
-			MinSize:                      pulumi.Int(5),
-			MaxSize:                      pulumi.Int(5),
+			MinSize:                      pulumi.Int(6),
+			MaxSize:                      pulumi.Int(6),
 		})
 		if err != nil {
 			return err
@@ -155,7 +156,6 @@ func main() {
 			"DB":                              pulumi.String(dbType),
 			"DB_PORT":                         pulumi.Sprintf("%d", dbPort),
 			"SQL_MAX_CONNS":                   pulumi.String("40"),
-			"SQL_MAX_IDLE_CONNS":              pulumi.String("40"),
 			fmt.Sprintf("%s_SEEDS", dbPrefix): db.Address,
 			fmt.Sprintf("%s_USER", dbPrefix):  pulumi.String("temporal"),
 			fmt.Sprintf("%s_PWD", dbPrefix):   pulumi.String("temporal"),
@@ -170,6 +170,26 @@ func main() {
 					Name: pulumi.String("temporal-env"),
 				},
 				Data: persistenceEnvConfig,
+			},
+			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
+				"kubernetes": k8sCluster,
+			}),
+		)
+		if err != nil {
+			return err
+		}
+
+		workerEnvConfig := pulumi.StringMap{
+			"TEMPORAL_WORKFLOW_TASK_POLLERS": pulumi.String(cfg.Require("WorkerWorkflowPollers")),
+			"TEMPORAL_ACTIVITY_TASK_POLLERS": pulumi.String(cfg.Require("WorkerActivityPollers")),
+		}.ToStringMapOutput()
+
+		workerConfig, err := corev1.NewConfigMap(ctx, "benchmark-worker-env",
+			&corev1.ConfigMapArgs{
+				Metadata: &metav1.ObjectMetaArgs{
+					Name: pulumi.String("benchmark-worker-env"),
+				},
+				Data: workerEnvConfig,
 			},
 			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
 				"kubernetes": k8sCluster,
@@ -237,11 +257,31 @@ func main() {
 		_, err = kustomize.NewDirectory(ctx, "benchmark",
 			kustomize.DirectoryArgs{
 				Directory: pulumi.String("../overlays/benchmark"),
+				Transformations: []yaml.Transformation{
+					func(state map[string]interface{}, opts ...pulumi.ResourceOption) {
+						name := state["metadata"].(map[string]interface{})["name"]
+
+						if state["kind"] == "Deployment" && name == "benchmark-workers" {
+							spec := state["spec"].(map[string]interface{})
+							spec["replicas"] = cfg.RequireInt("WorkerCount")
+						}
+
+						if state["kind"] == "Deployment" && name == "temporal-history" {
+							spec := state["spec"].(map[string]interface{})
+							spec["replicas"] = cfg.RequireInt("HistoryShards") / 512
+						}
+
+						if state["kind"] == "Deployment" && name == "temporal-matching" {
+							spec := state["spec"].(map[string]interface{})
+							spec["replicas"] = cfg.RequireInt("TaskQueuePartitions")
+						}
+					},
+				},
 			},
 			pulumi.ProviderMap(map[string]pulumi.ProviderResource{
 				"kubernetes": k8sCluster,
 			}),
-			pulumi.DependsOn([]pulumi.Resource{persistenceConfig, dynamicConfig, autosetup}),
+			pulumi.DependsOn([]pulumi.Resource{persistenceConfig, dynamicConfig, autosetup, workerConfig}),
 		)
 		if err != nil {
 			return err

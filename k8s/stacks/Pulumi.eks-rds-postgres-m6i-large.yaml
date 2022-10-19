@@ -5,9 +5,29 @@ config:
   temporal-benchmarks-k8s:PersistenceEngineVersion: 14.4
   temporal-benchmarks-k8s:PersistenceParameterGroupName: default.postgres14
   temporal-benchmarks-k8s:PersistenceInstance: db.m6i.large
-  temporal-benchmarks-k8s:HistoryShards: 1024
+  temporal-benchmarks-k8s:HistoryShards: 2048
+  temporal-benchmarks-k8s:TaskQueuePartitions: 8
+  temporal-benchmarks-k8s:WorkerCount: 8
+  temporal-benchmarks-k8s:WorkerWorkflowPollers: 48
+  temporal-benchmarks-k8s:WorkerActivityPollers: 16
   temporal-benchmarks-k8s:DynamicConfig: |
     matching.numTaskqueueReadPartitions:
-    - value: 4
+    - value: 8
     matching.numTaskqueueWritePartitions:
-    - value: 4
+    - value: 8
+    matching.useOldRouting:
+    - value: false
+    history.timerProcessorEnableMultiCursor:
+    - value: true
+    history.transferProcessorEnableMultiCursor:
+    - value: true
+    history.visibilityProcessorEnableMultiCursor:
+    - value: true
+    history.timerProcessorEnablePriorityTaskScheduler:
+    - value: true
+    history.transferProcessorEnablePriorityTaskScheduler:
+    - value: true
+    history.visibilityProcessorEnablePriorityTaskScheduler:
+    - value: true
+    system.enableActivityEagerExecution:
+    - value: true

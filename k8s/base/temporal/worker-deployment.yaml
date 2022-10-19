@@ -6,7 +6,7 @@ metadata:
     app.kubernetes.io/instance: temporal
     app.kubernetes.io/name: temporal
     app.kubernetes.io/part-of: temporal
-    app.kubernetes.io/version: 1.18.0
+    app.kubernetes.io/version: 1.18.1
   name: temporal-worker
 spec:
   progressDeadlineSeconds: 600
@@ -29,7 +29,7 @@ spec:
         app.kubernetes.io/instance: temporal
         app.kubernetes.io/name: temporal
         app.kubernetes.io/part-of: temporal
-        app.kubernetes.io/version: 1.18.0
+        app.kubernetes.io/version: 1.18.1
     spec:
       containers:
       - env:
@@ -44,10 +44,12 @@ spec:
           value: temporal-frontend:7233
         - name: PROMETHEUS_ENDPOINT
           value: 0.0.0.0:8000
+        - name: DYNAMIC_CONFIG_FILE_PATH
+          value: /etc/temporal/dynamic_config/dynamic_config.yaml
         envFrom:
         - configMapRef:
             name: temporal-env
-        image: temporalio/server:1.18.0
+        image: temporalio/server:1.18.1
         imagePullPolicy: IfNotPresent
         name: temporal
         ports:

@@ -1,0 +1,69 @@
+version: "3.5"
+services:
+  postgresql:
+    container_name: temporal-postgresql
+    environment:
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_USER: temporal
+    image: postgres:13
+    networks:
+      - temporal-network
+  temporal:
+    container_name: temporal
+    depends_on:
+      - postgresql
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgresql
+      - PROMETHEUS_ENDPOINT=0.0.0.0:8000
+    image: temporalio/auto-setup:1.18.1
+    networks:
+      - temporal-network
+    ports:
+      - 7233:7233
+  benchmark-workers:
+    container_name: benchmark-workers
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_GRPC_ENDPOINT=temporal:7233
+      - TEMPORAL_TASK_QUEUE=benchmark
+      - PROMETHEUS_ENDPOINT=0.0.0.0:8000
+    image: ghcr.io/temporalio/benchmark-workers:main
+    networks:
+      - temporal-network
+  temporal-admin-tools:
+    container_name: temporal-admin-tools
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_CLI_ADDRESS=temporal:7233
+    image: temporalio/admin-tools:1.18.1
+    networks:
+      - temporal-network
+    stdin_open: true
+    tty: true
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v2.39.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+      - --web.enable-remote-write-receiver
+    ports:
+      - 9090:9090
+    volumes:
+      - type: bind
+        source: ./prometheus-config.yml
+        target: /etc/prometheus/prometheus.yml
+    networks:
+      - temporal-network
+networks:
+  temporal-network:
+    driver: bridge
+    name: temporal-network

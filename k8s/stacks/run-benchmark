@@ -1,0 +1,13 @@
+#!/bin/sh
+
+kubectl run k6 -i --restart Never \
+    --image ghcr.io/temporalio/xk6-temporal:main \
+    --image-pull-policy=Always \
+    --env TEMPORAL_GRPC_ENDPOINT=temporal-frontend:7233 \
+    --env K6_OUT=output-prometheus-remote \
+    --env K6_PROMETHEUS_REMOTE_URL=http://prometheus-k8s.monitoring.svc.cluster.local:9090/api/v1/write \
+    -- k6 run \
+        --tag testid=$(uuidgen) \
+        --tag shards=$(pulumi config get -s "$1" HistoryShards) \
+        --tag partitions=$(pulumi config get -s "$1" TaskQueuePartitions) \
+        - < $2

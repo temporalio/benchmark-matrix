@@ -30,8 +30,15 @@ rows:
           datasource: prometheus
           targets:
             - prometheus:
-                query: sum(rate(state_transition_count_sum[$__rate_interval]))
+                query: sum(rate(state_transition_count_sum[1m]))
                 legend: "st/s"
+      - timeseries:
+          title: Actions
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum(rate(action[1m]))
+                legend: "action/s"
 
   - name: Polling
     panels:
@@ -80,7 +87,15 @@ rows:
                 legend: "{{task_type}}"
           axis:
             unit: percentunit
-            min: 0.75
+      - timeseries:
+          title: Poll Sync Per Taskqueue
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by (taskqueue) (rate(poll_success_sync_per_tl{taskqueue=~".*benchmark.*"}[$__rate_interval])) / sum by (taskqueue) (rate(poll_success_per_tl{taskqueue=~".*benchmark.*"}[$__rate_interval]))
+                legend: "{{taskqueue}}"
+          axis:
+            unit: percentunit
       - timeseries:
           title: Task Creation
           datasource: prometheus
@@ -88,6 +103,13 @@ rows:
             - prometheus:
                 query: sum(rate(persistence_requests{operation="CreateTask"}[$__rate_interval]))
                 legend: "tasks/s"
+      - timeseries:
+          title: Eager Activity Dispatch
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum(rate(activity_eager_execution[$__rate_interval]))
+                legend: "activities/s"
       - timeseries:
           title: Sticky Cache
           datasource: prometheus
@@ -108,7 +130,7 @@ rows:
           datasource: prometheus
           targets:
             - prometheus:
-                query: sum by (worker_type) (temporal_worker_task_slots_available{job="benchmark-monitoring",namespace="default"})
+                query: avg by (worker_type) (temporal_worker_task_slots_available{job="benchmark-monitoring",namespace="default"})
                 legend: "{{$worker_type}}"
   - name: Persistence
     panels:
@@ -171,11 +193,25 @@ rows:
   - name: Errors
     panels:
       - timeseries:
-          title: Service
+          title: Frontend
           datasource: prometheus
           targets:
             - prometheus:
-                query: sum by(error_type) (rate(service_error_with_type[$__rate_interval]))
+                query: sum by(error_type) (rate(service_error_with_type{service_name="frontend"}[$__rate_interval]))
+                legend: "{{$error_type}}"
+      - timeseries:
+          title: Matching
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by(error_type) (rate(service_error_with_type{service_name="matching"}[$__rate_interval]))
+                legend: "{{$error_type}}"
+      - timeseries:
+          title: History
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by(error_type) (rate(service_error_with_type{service_name="history"}[$__rate_interval]))
                 legend: "{{$error_type}}"
       - timeseries:
           title: Persistence

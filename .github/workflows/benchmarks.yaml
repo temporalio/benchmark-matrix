@@ -45,8 +45,8 @@ jobs:
             --
             k6 run --quiet -
       - run: |
-          echo "### Benchmark results:" >> $GITHUB_STEP_SUMMARY
-          echo "```${{steps.run-benchmark.outputs.kubectl-out}}```" >> $GITHUB_STEP_SUMMARY
+          echo "### Benchmark results for ${{ matrix.stack }}:" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.run-benchmark.outputs.kubectl-out }}" >> $GITHUB_STEP_SUMMARY
       - uses: pulumi/actions@v3
         with:
           work-dir: k8s/stacks

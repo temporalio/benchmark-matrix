@@ -43,19 +43,10 @@ jobs:
             --env K6_OUT=output-prometheus-remote
             --env K6_PROMETHEUS_REMOTE_URL=http://prometheus-k8s.monitoring.svc.cluster.local:9090/api/v1/write
             --
-            k6 run -
-      - uses: ianbelcher/eks-kubectl-action@master
-        id: sts-metric-report
-        with:
-          cluster_name: ${{ steps.pulumi-up.outputs.cluster-name }}
-          args: >
-            run sts-metric-report-${{ github.run_attempt }} -i --restart Never
-            --image ghcr.io/nalbury/promql-cli:main
-            --
-            --host http://prometheus-k8s.monitoring.svc.cluster.local:9090/
-            --output csv
-            max_over_time(sum(rate(state_transition_count_sum{namespace=\"default\"}[1m]))[24h:2m])
-      - run: "echo 'Max State Transitions/minute: ${{ steps.sts-metric-report.outputs.kubectl-out }}'"
+            k6 run --quiet -
+      - run: |
+          echo "### Benchmark results:" >> $GITHUB_STEP_SUMMARY
+          echo "```${{steps.run-benchmark.outputs.kubectl-out}}```" >> $GITHUB_STEP_SUMMARY
       - uses: pulumi/actions@v3
         with:
           work-dir: k8s/stacks

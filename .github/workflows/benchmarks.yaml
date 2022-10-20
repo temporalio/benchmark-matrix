@@ -7,7 +7,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        stack: [eks-rds-postgres-m6i-large,eks-rds-postgres-m6i-2xlarge]
+        stack: [eks-rds-postgres-m6i-2xlarge]
+        # stack: [eks-rds-postgres-m6i-large,eks-rds-postgres-m6i-2xlarge]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -31,7 +32,7 @@ jobs:
           stack-name: ${{ matrix.stack }}
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}
-      - uses: ianbelcher/eks-kubectl-action@master
+      - uses: robholland/eks-kubectl-action@master
         id: run-benchmark
         with:
           cluster_name: ${{ steps.pulumi-up.outputs.cluster-name }}
@@ -47,10 +48,10 @@ jobs:
       - run: |
           echo "### Benchmark results for ${{ matrix.stack }}:" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.run-benchmark.outputs.kubectl-out }}" >> $GITHUB_STEP_SUMMARY
-      - uses: pulumi/actions@v3
-        with:
-          work-dir: k8s/stacks
-          command: destroy
-          stack-name: ${{ matrix.stack }}
-        env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}
+      # - uses: pulumi/actions@v3
+      #   with:
+      #     work-dir: k8s/stacks
+      #     command: destroy
+      #     stack-name: ${{ matrix.stack }}
+      #   env:
+      #     PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}

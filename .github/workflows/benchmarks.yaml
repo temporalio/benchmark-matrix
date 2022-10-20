@@ -31,7 +31,7 @@ jobs:
           stack-name: ${{ matrix.stack }}
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}
-      - uses: robholland/eks-kubectl-action@master
+      - uses: ianbelcher/eks-kubectl-action@master
         id: run-benchmark
         with:
           cluster_name: ${{ steps.pulumi-up.outputs.cluster-name }}

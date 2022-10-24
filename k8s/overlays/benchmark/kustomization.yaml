@@ -1,3 +1,0 @@
-bases:
-- ../../base/temporal
-- ../../base/benchmark-workers

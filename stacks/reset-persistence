@@ -1,0 +1,3 @@
+#!/bin/sh
+
+pulumi -s "$1" up --target-replace "urn:pulumi:$1::temporal-benchmarks-k8s::aws:rds/instance:Instance::persistence" --target-dependents

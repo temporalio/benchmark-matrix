@@ -1,6 +1,8 @@
 config:
   pulumi:template: kubernetes-go
   temporal-benchmarks-k8s:EnvironmentStackName: temporalio/temporal-benchmarks-aws-environment/main
+  temporal-benchmarks-k8s:NodeType: t2.medium
+  temporal-benchmarks-k8s:NodeCount: 6
   temporal-benchmarks-k8s:PersistenceEngine: postgres
   temporal-benchmarks-k8s:PersistenceEngineVersion: 14.4
   temporal-benchmarks-k8s:PersistenceParameterGroupName: default.postgres14

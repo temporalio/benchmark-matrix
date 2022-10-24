@@ -4,8 +4,13 @@ import * as eks from "@pulumi/eks";
 import * as k8s from "@pulumi/kubernetes";
 
 let config = new pulumi.Config();
+
+let dbPrefix = "POSTGRES";
 let dbPort = 5432;
 let dbType = "postgresql";
+
+const historyPodCount = (shardCount: number) => shardCount / 512
+const matchingPodCount = (partitions: number) => partitions
 
 const envStack = new pulumi.StackReference(config.require("EnvironmentStackName"));
 
@@ -14,9 +19,10 @@ const cluster = new eks.Cluster(pulumi.getStack(), {
     publicSubnetIds: envStack.getOutput("PublicSubnetIds"),
     privateSubnetIds: envStack.getOutput("PrivateSubnetIds"),
     nodeAssociatePublicIpAddress: false,
-    desiredCapacity: 6,
-    minSize: 6,
-    maxSize: 6
+    instanceType: config.require('NodeType'),
+    desiredCapacity: config.requireNumber('NodeCount'),
+    minSize: config.requireNumber('NodeCount'),
+    maxSize: config.requireNumber('NodeCount')
 });
 
 export const clusterName = cluster.eksCluster.name;
@@ -57,8 +63,6 @@ const monitoring = new k8s.kustomize.Directory("monitoring",
     { directory: "../k8s/monitoring" },
     { provider: cluster.provider }
 );
-
-let dbPrefix = "POSTGRES";
 
 const temporalConfig = new k8s.core.v1.ConfigMap("temporal-env",
     {
@@ -133,15 +137,19 @@ const temporalAutoSetup = new k8s.batch.v1.Job("temporal-autosetup",
     }
 )
 
+const scaleDeployment = (name: string, replicas: number) => {
+    return (obj: any, opts: pulumi.CustomResourceOptions) => {
+        if (obj.kind === "Deployment" && obj.metadata.name === name) {
+            obj.spec.replicas = replicas
+        }
+    }
+}
+
 new k8s.kustomize.Directory("benchmark-workers",
     {
         directory: "../k8s/benchmark-workers",
         transformations: [
-            (obj: any, opts: pulumi.CustomResourceOptions) => {
-                if (obj.kind === "Deployment" && obj.metadata.name === "benchmark-workers") {
-                    obj.spec.replicas = config.requireNumber("WorkerCount")
-                }
-            },
+            scaleDeployment("benchmark-workers", config.requireNumber("WorkerCount"))
         ]
     },
     {
@@ -154,16 +162,8 @@ new k8s.kustomize.Directory("temporal",
     {
         directory: "../k8s/temporal",
         transformations: [
-            (obj: any, opts: pulumi.CustomResourceOptions) => {
-                if (obj.kind === "Deployment" && obj.metadata.name === "temporal-history") {
-                    obj.spec.replicas = config.requireNumber("HistoryShards") / 512
-                }
-            },
-            (obj: any, opts: pulumi.CustomResourceOptions) => {
-                if (obj.kind === "Deployment" && obj.metadata.name === "temporal-matching") {
-                    obj.spec.replicas = config.requireNumber("TaskQueuePartitions")
-                }
-            }
+            scaleDeployment("temporal-history", historyPodCount(config.requireNumber("HistoryShards"))),
+            scaleDeployment("temporal-matching", matchingPodCount(config.requireNumber("TaskQueuePartitions")))
         ]
     },
     {

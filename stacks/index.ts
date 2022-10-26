@@ -40,13 +40,9 @@ const rdsSecurityGroup = new aws.ec2.SecurityGroup(pulumi.getStack() + "-rds", {
     ]
 });
 
-const rdsSubnetGroup = new aws.rds.SubnetGroup(pulumi.getStack() + "-rds", {
-    subnetIds: envStack.getOutput("PrivateSubnetIds")
-});
-
 const rdsInstance = new aws.rds.Instance(pulumi.getStack(), {
-    availabilityZone: envStack.requireOutput('AvailabilityZones').apply(azs => azs[0]),
-    dbSubnetGroupName: rdsSubnetGroup.name,
+    availabilityZone: envStack.requireOutput('AvailabilityZones').apply(zones => zones[0]),
+    dbSubnetGroupName: envStack.requireOutput('RdsSubnetGroupName'),
     vpcSecurityGroupIds: [rdsSecurityGroup.id],
     identifierPrefix: pulumi.concat("persistence-", config.require('HistoryShards'), "-shards"),
     allocatedStorage: 100,
@@ -58,11 +54,6 @@ const rdsInstance = new aws.rds.Instance(pulumi.getStack(), {
     username: "temporal",
     password: "temporal",
 });
-
-const monitoring = new k8s.kustomize.Directory("monitoring",
-    { directory: "../k8s/monitoring" },
-    { provider: cluster.provider }
-);
 
 const temporalConfig = new k8s.core.v1.ConfigMap("temporal-env",
     {
@@ -145,17 +136,9 @@ const scaleDeployment = (name: string, replicas: number) => {
     }
 }
 
-new k8s.kustomize.Directory("benchmark-workers",
-    {
-        directory: "../k8s/benchmark-workers",
-        transformations: [
-            scaleDeployment("benchmark-workers", config.requireNumber("WorkerCount"))
-        ]
-    },
-    {
-        dependsOn: [workerConfig],
-        provider: cluster.provider
-    }
+new k8s.kustomize.Directory("monitoring",
+    { directory: "../k8s/monitoring" },
+    { provider: cluster.provider }
 );
 
 new k8s.kustomize.Directory("temporal",
@@ -168,6 +151,19 @@ new k8s.kustomize.Directory("temporal",
     },
     {
         dependsOn: [temporalConfig, temporalDynamicConfig, temporalAutoSetup],
+        provider: cluster.provider
+    }
+);
+
+new k8s.kustomize.Directory("benchmark-workers",
+    {
+        directory: "../k8s/benchmark-workers",
+        transformations: [
+            scaleDeployment("benchmark-workers", config.requireNumber("WorkerCount"))
+        ]
+    },
+    {
+        dependsOn: [workerConfig],
         provider: cluster.provider
     }
 );

@@ -6,7 +6,9 @@ Please note that this project is in the extremely early stages, clusters are not
 
 Once the matrix is able to run benchmarks across multiple providers and persistence backends we will apply constraints and tuning so that we can get consistent and meaningful benchmark results.
 
-# Current benchmarks
+# Benchmark matrix
+
+These are the platforms and persistence types that the benchmark matrix currently tests:
 
 | Provider | Platform | Persistence Type | Persistence Size |
 |---|---|---|---|

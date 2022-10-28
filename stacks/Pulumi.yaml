@@ -24,7 +24,7 @@ template:
       description: Number of history shards to use (https://docs.temporal.io/references/configuration#numhistoryshards)
       default: 2048
     temporal-benchmarks-k8s:TaskQueuePartitions:
-      description: Number of task queue partitions to use for the benchmark task queue
+      description: Number of task queue partitions to use for the benchmark task queue. This value is only by the stack to scale the matching system, it is not passed on as configuration for Temporal Server. Dynamic config should be set to actually apply the required settings for the server, see DynamicConfig.
       default: 8
     temporal-benchmarks-k8s:WorkerCount:
       description: Number of benchmark worker processes to run

@@ -1,3 +1,44 @@
 name: temporal-benchmarks-k8s
 runtime: nodejs
 description: Temporal benchmarks k8s clusters
+template:
+  config:
+    temporal-benchmarks-k8s:EnvironmentStackName:
+      description: AWS Environment stack to deploy into. See ../environment/aws.
+      default: temporalio/temporal-benchmarks-aws-environment/main
+    temporal-benchmarks-k8s:NodeType:
+      description: Node instance type to use for EKS
+      default: t2.medium
+    temporal-benchmarks-k8s:NodeCount: 
+      description: Number of nodes to use for EKS
+      default: 6
+    temporal-benchmarks-k8s:PersistenceEngine:
+      description: RDS engine
+    temporal-benchmarks-k8s:PersistenceEngineVersion:
+      description: RDS engine version
+    temporal-benchmarks-k8s:PersistenceParameterGroupName:
+      description: RDS engine parameter group
+    temporal-benchmarks-k8s:PersistenceInstance:
+      description: RDS instance type
+    temporal-benchmarks-k8s:HistoryShards:
+      description: Number of history shards to use (https://docs.temporal.io/references/configuration#numhistoryshards)
+      default: 2048
+    temporal-benchmarks-k8s:TaskQueuePartitions:
+      description: Number of task queue partitions to use for the benchmark task queue
+      default: 8
+    temporal-benchmarks-k8s:WorkerCount:
+      description: Number of benchmark worker processes to run
+      default: 16
+    temporal-benchmarks-k8s:WorkerWorkflowPollers:
+      description: Number of workflow task pollers for each benchmark worker (https://pkg.go.dev/go.temporal.io/sdk@v1.17.0/internal#WorkerOptions)
+      default: 32
+    temporal-benchmarks-k8s:WorkerActivityPollers:
+      description: Number of activity task pollers for each benchmark worker (https://pkg.go.dev/go.temporal.io/sdk@v1.17.0/internal#WorkerOptions)
+      default: 16
+    temporal-benchmarks-k8s:DynamicConfig:
+      description: "Temporal Server dynamic config. Note: this should be used to set task queue partitions as shown in the example below"
+      default: |
+        matching.numTaskqueueReadPartitions:
+        - value: 8
+        matching.numTaskqueueWritePartitions:
+        - value: 8

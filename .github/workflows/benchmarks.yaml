@@ -22,7 +22,7 @@ jobs:
       - uses: pulumi/actions@v3
         id: pulumi-up
         with:
-          work-dir: k8s/stacks
+          work-dir: stacks
           command: up
           stack-name: ${{ matrix.stack }}
         env:
@@ -45,7 +45,7 @@ jobs:
           echo "${{ steps.run-benchmark.outputs.kubectl-out }}" >> $GITHUB_STEP_SUMMARY
       - uses: pulumi/actions@v3
         with:
-          work-dir: k8s/stacks
+          work-dir: stacks
           command: destroy
           stack-name: ${{ matrix.stack }}
         env:

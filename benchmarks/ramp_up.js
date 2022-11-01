@@ -1,5 +1,7 @@
 import temporal from 'k6/x/temporal';
+import promclient from 'k6/x/prometheus-client';
 import { scenario } from 'k6/execution';
+import { textSummary } from 'https://jslib.k6.io/k6-summary/0.0.2/index.js';
 
 export const options = {
   scenarios: {
@@ -56,4 +58,33 @@ export default () => {
   waitForWorkflowCompletion(workflow)
   
   client.close()
+};
+
+const queryProm = (query) => {
+  const prom = promclient.newClient('http://localhost:9090')
+
+  const [result, warnings] = prom.query(query, new Date());
+
+  if (warnings.length) {
+     console.warn("Prometheus warnings:", warnings)
+  }
+
+  return result
+}
+
+export function handleSummary(data) {
+  delete(data.metrics.data_sent);
+  delete(data.metrics.data_received);
+
+  data.metrics.actions = {
+    "type": "counter",
+    "values": {
+      "count": queryProm('sum(action{namespace="default"})')[0].value,
+      "rate": queryProm('max_over_time(sum(rate(action{namespace="default"}[1m]))[15m:30s])')[0].value,
+    }
+  }
+
+  return {
+    'stdout': textSummary(data)
+  };
 };

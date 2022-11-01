@@ -1,0 +1,8 @@
+#!/bin/sh
+
+docker run --network temporal-network -i \
+    --env TEMPORAL_GRPC_ENDPOINT=temporal:7233 \
+    --env K6_OUT=output-prometheus-remote \
+    --env K6_PROMETHEUS_REMOTE_URL=http://prometheus:9090/api/v1/write \
+    xk6-temporal:main \
+    k6 run --tag testid=$(uuidgen) - < $1

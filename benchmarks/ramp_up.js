@@ -61,7 +61,7 @@ export default () => {
 };
 
 const queryProm = (query) => {
-  const prom = promclient.newClient('http://localhost:9090')
+  const prom = promclient.newClient(__ENV.PROMETHEUS_ENDPOINT)
 
   const [result, warnings] = prom.query(query, new Date());
 

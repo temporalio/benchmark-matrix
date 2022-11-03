@@ -79,8 +79,8 @@ export function handleSummary(data) {
   data.metrics.actions = {
     "type": "counter",
     "values": {
-      "count": queryProm('sum(action{namespace="default"})')[0].value,
-      "rate": queryProm('max_over_time(sum(rate(action{namespace="default"}[1m]))[15m:30s])')[0].value,
+      "count": queryProm('sum(action{namespace="default"})')[0].value + 0,
+      "rate": queryProm('max_over_time(sum(rate(action{namespace="default"}[1m]))[15m:30s])')[0].value + 0,
     }
   }
 

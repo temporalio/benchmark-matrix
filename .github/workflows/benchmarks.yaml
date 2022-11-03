@@ -35,7 +35,7 @@ jobs:
       - uses: ianbelcher/eks-kubectl-action@master
         id: run-benchmark
         with:
-          cluster_name: ${{ steps.pulumi-up.outputs.cluster-name }}
+          cluster_name: ${{ steps.pulumi-up.outputs.clusterName }}
           stdin: benchmarks/ramp_up.js
           args: >
             run k6-${{ github.run_attempt }} -i --restart Never

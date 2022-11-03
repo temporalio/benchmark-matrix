@@ -39,7 +39,7 @@ jobs:
           stdin: benchmarks/ramp_up.js
           args: >
             run k6-${{ github.run_attempt }} -i --restart Never
-            --image ghcr.io/temporalio/xk6-temporal:main
+            --image ghcr.io/temporalio/xk6-temporal:v0.1.0
             --env TEMPORAL_GRPC_ENDPOINT=temporal-frontend:7233
             --env K6_OUT=output-prometheus-remote
             --env K6_PROMETHEUS_REMOTE_URL=http://prometheus-k8s.monitoring.svc.cluster.local:9090/api/v1/write

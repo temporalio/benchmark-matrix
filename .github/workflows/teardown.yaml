@@ -1,0 +1,34 @@
+name: Teardown clusters
+on:
+  - workflow_dispatch 
+jobs:
+  benchmarks:
+    name: Teardown clusters
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: [eks-rds-postgres-m6i-large,eks-rds-postgres-m6i-2xlarge]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+      - run: npm install
+        working-directory: stacks
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+      - uses: pulumi/actions@v3
+        id: pulumi-down
+        with:
+          work-dir: stacks
+          command: destroy
+          stack-name: ${{ matrix.stack }}
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}

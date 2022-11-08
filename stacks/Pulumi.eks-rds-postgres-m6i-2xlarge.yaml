@@ -1,35 +1,41 @@
 config:
   pulumi:template: kubernetes-go
-  temporal-benchmarks-k8s:EnvironmentStackName: temporalio/temporal-benchmarks-aws-environment/main
-  temporal-benchmarks-k8s:NodeType: t2.medium
-  temporal-benchmarks-k8s:NodeCount: 6
-  temporal-benchmarks-k8s:PersistenceEngine: postgres
-  temporal-benchmarks-k8s:PersistenceEngineVersion: 14.4
-  temporal-benchmarks-k8s:PersistenceParameterGroupName: default.postgres14
-  temporal-benchmarks-k8s:PersistenceInstance: db.m6i.2xlarge
-  temporal-benchmarks-k8s:HistoryShards: 2048
-  temporal-benchmarks-k8s:TaskQueuePartitions: 8
-  temporal-benchmarks-k8s:WorkerCount: 16
-  temporal-benchmarks-k8s:WorkerWorkflowPollers: 32
-  temporal-benchmarks-k8s:WorkerActivityPollers: 16
-  temporal-benchmarks-k8s:DynamicConfig: |
-    matching.numTaskqueueReadPartitions:
-    - value: 8
-    matching.numTaskqueueWritePartitions:
-    - value: 8
-    matching.useOldRouting:
-    - value: false
-    history.timerProcessorEnableMultiCursor:
-    - value: true
-    history.transferProcessorEnableMultiCursor:
-    - value: true
-    history.visibilityProcessorEnableMultiCursor:
-    - value: true
-    history.timerProcessorEnablePriorityTaskScheduler:
-    - value: true
-    history.transferProcessorEnablePriorityTaskScheduler:
-    - value: true
-    history.visibilityProcessorEnablePriorityTaskScheduler:
-    - value: true
-    system.enableActivityEagerExecution:
-    - value: true
+  temporal-benchmarks-k8s:Cluster:
+    EKS:
+      EnvironmentStackName: temporalio/temporal-benchmarks-aws-environment/main
+      NodeType: t2.medium
+      NodeCount: 6
+  temporal-benchmarks-k8s:Persistence:
+    RDS:
+      EnvironmentStackName: temporalio/temporal-benchmarks-aws-environment/main
+      Engine: postgres
+      EngineVersion: 14.4
+      ParameterGroup: default.postgres14
+      InstanceType: db.m6i.2xlarge
+  temporal-benchmarks-k8s:Temporal:
+    HistoryShards: 2048
+    TaskQueuePartitions: 8
+    WorkerCount: 16
+    WorkerWorkflowPollers: 32
+    WorkerActivityPollers: 16
+    DynamicConfig: |
+      matching.numTaskqueueReadPartitions:
+      - value: 8
+      matching.numTaskqueueWritePartitions:
+      - value: 8
+      matching.useOldRouting:
+      - value: false
+      history.timerProcessorEnableMultiCursor:
+      - value: true
+      history.transferProcessorEnableMultiCursor:
+      - value: true
+      history.visibilityProcessorEnableMultiCursor:
+      - value: true
+      history.timerProcessorEnablePriorityTaskScheduler:
+      - value: true
+      history.transferProcessorEnablePriorityTaskScheduler:
+      - value: true
+      history.visibilityProcessorEnablePriorityTaskScheduler:
+      - value: true
+      system.enableActivityEagerExecution:
+      - value: true

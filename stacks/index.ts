@@ -2,6 +2,7 @@ import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import * as eks from "@pulumi/eks";
 import * as k8s from "@pulumi/kubernetes";
+import * as gcp from "@pulumi/gcp";
 
 let config = new pulumi.Config();
 
@@ -21,6 +22,10 @@ interface Cluster {
     name: pulumi.Output<string>;
     kubeconfig: pulumi.Output<any>;
     provider: k8s.Provider;
+    EKS?: EKSClusterOutputs;
+}
+
+interface EKSClusterOutputs {
     securityGroup: pulumi.Output<string>;
 }
 
@@ -30,12 +35,20 @@ interface EKSClusterConfig {
     NodeCount: number;
 }
 
+interface GKEClusterConfig {
+    ProjectName: string;
+    NodeType: string;
+    NodeCount: number;
+}
+
 interface ClusterConfig {
     EKS: EKSClusterConfig | undefined;
+    GKE: GKEClusterConfig | undefined;
 }
 
 interface PersistenceConfig {
     RDS: RDSPersistenceConfig | undefined;
+    GCP: GCPPersistenceConfig | undefined;
 }
 
 interface RDSPersistenceConfig {
@@ -46,6 +59,11 @@ interface RDSPersistenceConfig {
     InstanceType: string;
 }
 
+interface GCPPersistenceConfig {
+    DatabaseVersion: string;
+    Tier: string;
+}
+
 interface Persistence {
     type: string;
     port: number;
@@ -54,8 +72,10 @@ interface Persistence {
 }
 
 function createCluster(clusterConfig: ClusterConfig): Cluster {
-    if (clusterConfig.EKS != undefined) {
-        return eksCluster(pulumi.getStack(), clusterConfig.EKS)
+    if (clusterConfig.EKS !== undefined) {
+        return eksCluster(pulumi.getStack(), clusterConfig.EKS);
+    } else if (clusterConfig.GKE !== undefined) {
+        return gkeCluster(pulumi.getStack(), clusterConfig.GKE);
     }
 
     throw("invalid cluster config")
@@ -79,13 +99,73 @@ function eksCluster(name: string, config: EKSClusterConfig): Cluster {
         name: cluster.eksCluster.name,
         kubeconfig: cluster.kubeconfig,
         provider: cluster.provider,
-        securityGroup: cluster.nodeSecurityGroup.id,
+        EKS: {
+            securityGroup: cluster.nodeSecurityGroup.id
+        }
     }
 }
 
-function createPersistence(config: PersistenceConfig, securityGroup: pulumi.Output<string>): Persistence {
-    if (config.RDS != undefined) {
-        return rdsPersistence(pulumi.getStack(), config.RDS, securityGroup)
+function gkeCluster(name: string, config: GKEClusterConfig): Cluster {
+    const engineVersion = gcp.container.getEngineVersions().then(v => v.latestMasterVersion);
+
+    const cluster = new gcp.container.Cluster(name, {
+        initialNodeCount: config.NodeCount,
+        minMasterVersion: engineVersion,
+        nodeVersion: engineVersion,
+        nodeConfig: {
+            machineType: config.NodeType,
+            oauthScopes: [
+                "https://www.googleapis.com/auth/compute",
+                "https://www.googleapis.com/auth/devstorage.read_only",
+                "https://www.googleapis.com/auth/logging.write",
+                "https://www.googleapis.com/auth/monitoring"
+            ],
+        },
+    })
+
+    const kubeconfig = pulumi.
+        all([cluster.name, cluster.endpoint, cluster.masterAuth]).
+        apply(([name, endpoint, masterAuth]) => {
+            const context: string = `${gcp.config.project}_${gcp.config.zone}_${name}`;
+
+            return `apiVersion: v1
+            clusters:
+            - cluster:
+                certificate-authority-data: ${masterAuth.clusterCaCertificate}
+                server: https://${endpoint}
+              name: ${context}
+            contexts:
+            - context:
+                cluster: ${context}
+                user: ${context}
+              name: ${context}
+            current-context: ${context}
+            kind: Config
+            preferences: {}
+            users:
+            - name: ${context}
+              user:
+                auth-provider:
+                  config:
+                    cmd-args: config config-helper --format=json
+                    cmd-path: gcloud
+                    expiry-key: '{.credential.token_expiry}'
+                    token-key: '{.credential.access_token}'
+                  name: gcp
+            `;
+        })
+
+    return {
+        name: cluster.name,
+        kubeconfig: kubeconfig,
+        provider: new k8s.Provider(name, { kubeconfig: kubeconfig })
+    }
+}
+
+function createPersistence(config: PersistenceConfig, cluster: Cluster): Persistence {
+    if (config.RDS && cluster.EKS) {
+        return rdsPersistence(pulumi.getStack(), config.RDS, cluster.EKS.securityGroup)
+    } else if (config.GCP) {
     }
 
     throw("invalid persistence config")
@@ -142,13 +222,29 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
     }
 }
 
+function gcpPersistence(name: string, config: GCPPersistenceConfig): Persistence {
+    const db = new gcp.sql.DatabaseInstance("main", {
+        databaseVersion: "POSTGRES_14",
+        settings: {
+            tier: "db-f1-micro",
+        },
+    });
+    
+    return {
+        type: "",
+        port: 1,
+        prefix: "",
+        address: ""
+    }
+}
+
 const temporalConfig = config.requireObject<TemporalConfig>('Temporal');
 
 const clusterConfig = config.requireObject<ClusterConfig>('Cluster')
 const cluster = createCluster(clusterConfig);
 
 const persistenceConfig = config.requireObject<PersistenceConfig>('Persistence');
-const persistence = createPersistence(persistenceConfig, cluster.securityGroup)
+const persistence = createPersistence(persistenceConfig, cluster)
 
 const temporalEnv = new k8s.core.v1.ConfigMap("temporal-env",
     {

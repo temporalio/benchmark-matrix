@@ -42,7 +42,6 @@ interface RDSPersistenceConfig {
     EnvironmentStackName: string;
     Engine: string;
     EngineVersion: string;
-    ParameterGroup: string;
     InstanceType: string;
 }
 
@@ -74,7 +73,7 @@ function eksCluster(name: string, config: EKSClusterConfig): Cluster {
         maxSize: 3,
     });
 
-    const temporalNodegroup = cluster.createNodeGroup(name + '-temporal', {
+    cluster.createNodeGroup(name + '-temporal', {
         instanceType: config.NodeType,
         desiredCapacity: config.NodeCount,
         minSize: config.NodeCount,
@@ -110,7 +109,7 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
     let dbPort: number;
     let dbPrefix: string;
 
-    if (config.Engine == "postgres") {
+    if (config.Engine == "postgres" || config.Engine == "aurora-postgresql") {
         dbPrefix = "POSTGRES";
         dbType = "postgresql";
         dbPort = 5432;
@@ -131,26 +130,54 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
         toPort: dbPort,
     });
 
-    const rdsInstance = new aws.rds.Instance(name, {
-        availabilityZone: envStack.requireOutput('AvailabilityZones').apply(zones => zones[0]),
-        dbSubnetGroupName: envStack.requireOutput('RdsSubnetGroupName'),
-        vpcSecurityGroupIds: [rdsSecurityGroup.id],
-        identifierPrefix: name,
-        allocatedStorage: 100,
-        engine: config.Engine,
-        engineVersion: config.EngineVersion,
-        instanceClass: config.InstanceType,
-        parameterGroupName: config.ParameterGroup,
-        skipFinalSnapshot: true,
-        username: "temporal",
-        password: "temporal",
-    });
-    
-    return {
-        type: dbType,
-        port: dbPort,
-        prefix: dbPrefix,
-        address: rdsInstance.address
+    if (config.Engine == "aurora-postgresql") {
+        const rdsCluster = new aws.rds.Cluster(name, {
+            availabilityZones: envStack.requireOutput('AvailabilityZones'),
+            dbSubnetGroupName: envStack.requireOutput('RdsSubnetGroupName'),
+            vpcSecurityGroupIds: [rdsSecurityGroup.id],
+            clusterIdentifierPrefix: name,
+            engine: config.Engine,
+            engineVersion: config.EngineVersion,
+            skipFinalSnapshot: true,
+            masterUsername: "temporal",
+            masterPassword: "temporal",
+        });
+
+        new aws.rds.ClusterInstance(name, {
+            identifierPrefix: name,
+            clusterIdentifier: rdsCluster.id,
+            engine: config.Engine,
+            engineVersion: config.EngineVersion,
+            instanceClass: config.InstanceType,
+        })
+
+        return {
+            type: dbType,
+            port: dbPort,
+            prefix: dbPrefix,
+            address: rdsCluster.endpoint
+        }    
+    } else {
+        const rdsInstance = new aws.rds.Instance(name, {
+            availabilityZone: envStack.requireOutput('AvailabilityZones').apply(zones => zones[0]),
+            dbSubnetGroupName: envStack.requireOutput('RdsSubnetGroupName'),
+            vpcSecurityGroupIds: [rdsSecurityGroup.id],
+            identifierPrefix: name,
+            allocatedStorage: 100,
+            engine: config.Engine,
+            engineVersion: config.EngineVersion,
+            instanceClass: config.InstanceType,
+            skipFinalSnapshot: true,
+            username: "temporal",
+            password: "temporal",
+        });
+        
+        return {
+            type: dbType,
+            port: dbPort,
+            prefix: dbPrefix,
+            address: rdsInstance.address
+        }    
     }
 }
 

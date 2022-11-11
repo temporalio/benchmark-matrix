@@ -7,7 +7,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        stack: [eks-rds-postgres-m6i-large,eks-rds-postgres-m6i-2xlarge]
+        stack: [eks-rds-postgres-m6i-large,eks-rds-postgres-m6i-2xlarge,eks-rds-aurora-postgres-r5-2xlarge]
     runs-on: ubuntu-latest
     permissions:
       id-token: write

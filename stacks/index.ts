@@ -69,12 +69,24 @@ function eksCluster(name: string, config: EKSClusterConfig): Cluster {
         publicSubnetIds: envStack.getOutput("PublicSubnetIds"),
         privateSubnetIds: envStack.getOutput("PrivateSubnetIds"),
         nodeAssociatePublicIpAddress: false,
+        desiredCapacity: 3,
+        minSize: 3,
+        maxSize: 3,
+    });
+
+    const temporalNodegroup = cluster.createNodeGroup(name + '-temporal', {
         instanceType: config.NodeType,
         desiredCapacity: config.NodeCount,
         minSize: config.NodeCount,
-        maxSize: config.NodeCount
-    });
-    
+        maxSize: config.NodeCount,
+        labels: {
+            dedicated: "temporal",
+        },
+        taints: {
+            "dedicated": { value: "temporal", effect: "NoSchedule" }
+        }
+    })
+
     return {
         name: cluster.eksCluster.name,
         kubeconfig: cluster.kubeconfig,
@@ -231,6 +243,16 @@ const scaleDeployment = (name: string, replicas: number) => {
     }
 }
 
+const tolerateDedicated = (value: string) => {
+    return (obj: any, opts: pulumi.CustomResourceOptions) => {
+        if (obj.kind === "Deployment") {
+            obj.spec.template.spec.tolerations = [
+                { key: "dedicated", operator: "Equal", value: value, effect: "NoSchedule" }
+            ]
+        }
+    }
+}
+
 new k8s.kustomize.Directory("monitoring",
     { directory: "../k8s/monitoring" },
     { provider: cluster.provider }
@@ -241,7 +263,8 @@ new k8s.kustomize.Directory("temporal",
         directory: "../k8s/temporal",
         transformations: [
             scaleDeployment("temporal-history", historyPodCount(temporalConfig.HistoryShards)),
-            scaleDeployment("temporal-matching", matchingPodCount(temporalConfig.TaskQueuePartitions))
+            scaleDeployment("temporal-matching", matchingPodCount(temporalConfig.TaskQueuePartitions)),
+            tolerateDedicated("temporal"),
         ]
     },
     {

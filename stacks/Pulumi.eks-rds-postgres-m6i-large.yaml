@@ -7,6 +7,7 @@ config:
       NodeCount: 6
   temporal-benchmarks-k8s:Persistence:
     RDS:
+      EnvironmentStackName: temporalio/temporal-benchmarks-aws-environment/main
       Engine: postgres
       EngineVersion: 14.4
       ParameterGroup: default.postgres14

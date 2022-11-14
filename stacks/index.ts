@@ -73,6 +73,16 @@ function describeCluster(clusterConfig: ClusterConfig, persistenceConfig: Persis
         summary += "  Unknown persistence system\n";
     }
 
+    summary += "Temporal:\n";
+    summary += `  History Shards: ${temporalConfig.HistoryShards}\n`;
+    summary += `  Matching: ${matchingPodCount(temporalConfig.TaskQueuePartitions)} pods\n`;
+    summary += `  History: ${historyPodCount(temporalConfig.HistoryShards)} pods\n`;
+    summary += `  Task queue partitions: ${temporalConfig.TaskQueuePartitions}\n`;
+    summary += "Benchmark Workers:\n";
+    summary += `  Pods: ${temporalConfig.WorkerCount}\n`;
+    summary += `  Workflow Pollers: ${temporalConfig.WorkerWorkflowPollers}\n`;
+    summary += `  Activity Pollers: ${temporalConfig.WorkerActivityPollers}\n`;
+
     return summary;
 }
 

@@ -85,6 +85,6 @@ export function handleSummary(data) {
   }
 
   return {
-    'stdout': textSummary(data)
+    'stdout': textSummary(data, { enableColors: false })
   };
 };

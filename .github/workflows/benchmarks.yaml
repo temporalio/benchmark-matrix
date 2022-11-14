@@ -32,6 +32,9 @@ jobs:
           stack-name: ${{ matrix.stack }}
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_TOKEN }}
+      - run: |
+          echo "### Benchmark: ${{ matrix.stack }}" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.pulumi-up.outputs.clusterSummary }}" >> $GITHUB_STEP_SUMMARY
       - uses: ianbelcher/eks-kubectl-action@master
         id: run-benchmark
         with:
@@ -47,7 +50,6 @@ jobs:
             --
             k6 run --quiet --no-color -
       - run: |
-          echo "### Benchmark: ${{ matrix.stack }}" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.run-benchmark.outputs.kubectl-out }}" >> $GITHUB_STEP_SUMMARY
       - uses: pulumi/actions@v3
         with:

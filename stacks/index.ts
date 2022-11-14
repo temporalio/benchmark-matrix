@@ -52,6 +52,30 @@ interface Persistence {
     address: pulumi.Output<string>;
 }
 
+function describeCluster(clusterConfig: ClusterConfig, persistenceConfig: PersistenceConfig): string {
+    let summary = "";
+
+    summary += "Cluster:\n";
+
+    if (clusterConfig.EKS) {
+        summary += "  Platform: EKS\n";
+        summary += `  Nodes: ${clusterConfig.EKS.NodeCount} x ${clusterConfig.EKS.NodeType}\n`;
+    } else {
+        summary += "  Unknown cluster type\n";
+    }
+
+    summary += "Persistence:\n";
+
+    if (persistenceConfig.RDS) {
+        summary += `  Engine: ${persistenceConfig.RDS.Engine}\n`;
+        summary += `  Instance: ${persistenceConfig.RDS.InstanceType}\n`;
+    } else {
+        summary += "  Unknown persistence system\n";
+    }
+
+    return summary;
+}
+
 function createCluster(clusterConfig: ClusterConfig): Cluster {
     if (clusterConfig.EKS != undefined) {
         return eksCluster(pulumi.getStack(), clusterConfig.EKS)
@@ -315,3 +339,4 @@ new k8s.kustomize.Directory("benchmark-workers",
 
 export const clusterName = cluster.name;
 export const kubeconfig = cluster.kubeconfig;
+export const clusterSummary = describeCluster(clusterConfig, persistenceConfig);

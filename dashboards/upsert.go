@@ -25,7 +25,7 @@ func main() {
 		log.Fatalf("could not find or create folder: %v\n", err)
 	}
 
-	content, err := ioutil.ReadFile("./dashboards/stack.yaml")
+	content, err := ioutil.ReadFile("./stack.yaml")
 	if err != nil {
 		log.Fatalf("could not read file: %v\n", err)
 	}
@@ -39,7 +39,7 @@ func main() {
 		log.Fatalf("could not create dashboard: %v\n", err)
 	}
 
-	content, err = ioutil.ReadFile("./dashboards/summary.yaml")
+	content, err = ioutil.ReadFile("./summary.yaml")
 	if err != nil {
 		log.Fatalf("could not read file: %v\n", err)
 	}

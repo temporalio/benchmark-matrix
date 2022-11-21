@@ -36,6 +36,7 @@ interface ClusterConfig {
 
 interface PersistenceConfig {
     RDS: RDSPersistenceConfig | undefined;
+    Cassandra: CassandaPersistenceConfig | undefined;
 }
 
 interface RDSPersistenceConfig {
@@ -44,6 +45,11 @@ interface RDSPersistenceConfig {
     EngineVersion: string;
     InstanceType: string;
 }
+
+interface CassandaPersistenceConfig {
+    NodeType: string;
+    NodeCount: number;
+};
 
 interface Persistence {
     type: string;
@@ -86,15 +92,15 @@ function describeCluster(clusterConfig: ClusterConfig, persistenceConfig: Persis
     return summary;
 }
 
-function createCluster(clusterConfig: ClusterConfig): Cluster {
+function createCluster(clusterConfig: ClusterConfig, persistenceConfig: PersistenceConfig): Cluster {
     if (clusterConfig.EKS != undefined) {
-        return eksCluster(pulumi.getStack(), clusterConfig.EKS)
+        return eksCluster(pulumi.getStack(), clusterConfig.EKS, persistenceConfig)
     }
 
     throw("invalid cluster config")
 }
 
-function eksCluster(name: string, config: EKSClusterConfig): Cluster {
+function eksCluster(name: string, config: EKSClusterConfig, persistenceConfig: PersistenceConfig): Cluster {
     const envStack = new pulumi.StackReference('eksEnvironment' + config.EnvironmentStackName, { name: config.EnvironmentStackName });
     
     const cluster = new eks.Cluster(name, {
@@ -119,6 +125,23 @@ function eksCluster(name: string, config: EKSClusterConfig): Cluster {
             "dedicated": { value: "temporal", effect: "NoSchedule" }
         }
     })
+
+    if (persistenceConfig.Cassandra) {
+        const cassandraConfig = persistenceConfig.Cassandra;
+
+        cluster.createNodeGroup(name + '-cassandra', {
+            instanceType: cassandraConfig.NodeType,
+            desiredCapacity: cassandraConfig.NodeCount,
+            minSize: cassandraConfig.NodeCount,
+            maxSize: cassandraConfig.NodeCount,
+            labels: {
+                dedicated: "cassandra",
+            },
+            taints: {
+                "dedicated": { value: "cassandra", effect: "NoSchedule" }
+            }
+        })    
+    }
 
     return {
         name: cluster.eksCluster.name,
@@ -215,12 +238,30 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
     }
 }
 
+function cassandraPersistence(name: string, config: RDSPersistenceConfig): Persistence {
+    new k8s.kustomize.Directory("cert-manager",
+        { directory: "../k8s/cert-manager" },
+        { provider: cluster.provider }
+    );
+
+    new k8s.kustomize.Directory("cassandra",
+        { directory: "../k8s/cassandra" },
+        { provider: cluster.provider }
+    );
+
+    return {
+        type: "cassandra",
+        port: 9042,
+        prefix: "CASSANDRA",
+        address: pulumi.output("cassandra.default.svc.cluster.local"),
+    }
+}
+
 const temporalConfig = config.requireObject<TemporalConfig>('Temporal');
-
 const clusterConfig = config.requireObject<ClusterConfig>('Cluster')
-const cluster = createCluster(clusterConfig);
-
 const persistenceConfig = config.requireObject<PersistenceConfig>('Persistence');
+
+const cluster = createCluster(clusterConfig, persistenceConfig);
 const persistence = createPersistence(persistenceConfig, cluster.securityGroup)
 
 const temporalEnv = new k8s.core.v1.ConfigMap("temporal-env",

@@ -1,0 +1,2 @@
+resources:
+- "github.com/k8ssandra/k8ssandra-operator/config/deployments/control-plane?ref=v1.1.1"

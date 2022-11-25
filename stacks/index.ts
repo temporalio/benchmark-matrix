@@ -36,7 +36,7 @@ interface ClusterConfig {
 
 interface PersistenceConfig {
     RDS: RDSPersistenceConfig | undefined;
-    Cassandra: CassandaPersistenceConfig | undefined;
+    Cassandra: CassandraPersistenceConfig | undefined;
 }
 
 interface RDSPersistenceConfig {
@@ -46,16 +46,15 @@ interface RDSPersistenceConfig {
     InstanceType: string;
 }
 
-interface CassandaPersistenceConfig {
+interface CassandraPersistenceConfig {
     NodeType: string;
     NodeCount: number;
 };
 
 interface Persistence {
-    type: string;
-    port: number;
-    prefix: string;
-    address: pulumi.Output<string>;
+    Config: pulumi.Input<{
+        [key: string]: pulumi.Input<string>;
+    }>
 }
 
 function describeCluster(clusterConfig: ClusterConfig, persistenceConfig: PersistenceConfig): string {
@@ -75,6 +74,9 @@ function describeCluster(clusterConfig: ClusterConfig, persistenceConfig: Persis
     if (persistenceConfig.RDS) {
         summary += `  Engine: ${persistenceConfig.RDS.Engine}\n`;
         summary += `  Instance: ${persistenceConfig.RDS.InstanceType}\n`;
+    } else if (persistenceConfig.Cassandra) {
+        summary += `  Engine: Cassandra\n`;
+        summary += `  Instance: ${persistenceConfig.Cassandra.NodeCount} x ${persistenceConfig.Cassandra.NodeType}\n`;
     } else {
         summary += "  Unknown persistence system\n";
     }
@@ -140,7 +142,7 @@ function eksCluster(name: string, config: EKSClusterConfig, persistenceConfig: P
             taints: {
                 "dedicated": { value: "cassandra", effect: "NoSchedule" }
             }
-        })    
+        })
     }
 
     return {
@@ -151,9 +153,11 @@ function eksCluster(name: string, config: EKSClusterConfig, persistenceConfig: P
     }
 }
 
-function createPersistence(config: PersistenceConfig, securityGroup: pulumi.Output<string>): Persistence {
+function createPersistence(config: PersistenceConfig, cluster: Cluster): Persistence {
     if (config.RDS != undefined) {
-        return rdsPersistence(pulumi.getStack(), config.RDS, securityGroup)
+        return rdsPersistence(pulumi.getStack(), config.RDS, cluster.securityGroup)
+    } else if (config.Cassandra != undefined) {
+        return cassandraPersistence(pulumi.getStack(), config.Cassandra, cluster)
     }
 
     throw("invalid persistence config")
@@ -209,10 +213,17 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
         })
 
         return {
-            type: dbType,
-            port: dbPort,
-            prefix: dbPrefix,
-            address: rdsCluster.endpoint
+            Config: {
+                "DB": dbType,
+                "DB_PORT": dbPort.toString(),
+                "SQL_MAX_CONNS": "40",
+                "POSTGRES_SEEDS": rdsCluster.endpoint,
+                "POSTGRES_USER": "temporal",
+                "POSTGRES_PWD": "temporal",
+                "DBNAME": "temporal_persistence",
+                "VISIBILITY_DBNAME": "temporal_visibility",
+                "NUM_HISTORY_SHARDS": temporalConfig.HistoryShards.toString(),    
+            }
         }    
     } else {
         const rdsInstance = new aws.rds.Instance(name, {
@@ -230,30 +241,61 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
         });
         
         return {
-            type: dbType,
-            port: dbPort,
-            prefix: dbPrefix,
-            address: rdsInstance.address
+            Config: {
+                "DB": dbType,
+                "DB_PORT": dbPort.toString(),
+                "SQL_MAX_CONNS": "40",
+                "POSTGRES_SEEDS": rdsInstance.address,
+                "POSTGRES_USER": "temporal",
+                "POSTGRES_PWD": "temporal",
+                "DBNAME": "temporal_persistence",
+                "VISIBILITY_DBNAME": "temporal_visibility",
+                "NUM_HISTORY_SHARDS": temporalConfig.HistoryShards.toString(),    
+            }
         }    
     }
 }
 
-function cassandraPersistence(name: string, config: RDSPersistenceConfig): Persistence {
-    new k8s.kustomize.Directory("cert-manager",
-        { directory: "../k8s/cert-manager" },
-        { provider: cluster.provider }
-    );
-
-    new k8s.kustomize.Directory("cassandra",
-        { directory: "../k8s/cassandra" },
-        { provider: cluster.provider }
-    );
+function cassandraPersistence(name: string, config: CassandraPersistenceConfig, cluster: Cluster): Persistence {
+    const namespace = new k8s.core.v1.Namespace("cassandra", { metadata: { name: "cassandra" } }, { provider: cluster.provider })
+    
+    new k8s.helm.v3.Chart('cassandra',
+        {
+            chart: "cassandra",
+            version: "9.7.5",
+            namespace: "cassandra",
+            fetchOpts:{
+                repo: "https://charts.bitnami.com/bitnami",
+            },
+            values: {
+                "dbUser": {
+                    "user": "temporal",
+                    "password": "temporal",
+                },
+                "replicaCount": config.NodeCount,
+                "persistence": {
+                    "enabled": false,
+                },
+                "tolerations": [
+                    { key: "dedicated", operator: "Equal", value: "cassandra", effect: "NoSchedule" },
+                ],
+            },
+        },
+        { dependsOn: namespace, provider: cluster.provider }
+    )
 
     return {
-        type: "cassandra",
-        port: 9042,
-        prefix: "CASSANDRA",
-        address: pulumi.output("cassandra.default.svc.cluster.local"),
+        Config: {
+            "DB": "cassandra",
+            "DB_PORT": "9042",
+            "CASSANDRA_MAX_CONNS": "40",
+            "CASSANDRA_SEEDS": pulumi.output("cassandra.cassandra.svc.cluster.local"),
+            "CASSANDRA_USER": "temporal",
+            "CASSANDRA_PASSWORD": "temporal",
+            "DBNAME": "temporal_persistence",
+            "VISIBILITY_DBNAME": "temporal_visibility",
+            "NUM_HISTORY_SHARDS": temporalConfig.HistoryShards.toString(),    
+        }
     }
 }
 
@@ -262,23 +304,12 @@ const clusterConfig = config.requireObject<ClusterConfig>('Cluster')
 const persistenceConfig = config.requireObject<PersistenceConfig>('Persistence');
 
 const cluster = createCluster(clusterConfig, persistenceConfig);
-const persistence = createPersistence(persistenceConfig, cluster.securityGroup)
+const persistence = createPersistence(persistenceConfig, cluster)
 
 const temporalEnv = new k8s.core.v1.ConfigMap("temporal-env",
     {
         metadata: { name: "temporal-env" },
-        data: {
-            "DB": persistence.type,
-            "DB_PORT": persistence.port.toString(),
-            "SQL_MAX_CONNS": "40",
-            [`${persistence.prefix}_SEEDS`]: persistence.address,
-            [`${persistence.prefix}_USER`]: "temporal",
-            [`${persistence.prefix}_PWD`]: "temporal",
-            "DBNAME": "temporal_persistence",
-            "VISIBILITY_DBNAME": "temporal_visibility",
-            "MYSQL_TX_ISOLATION_COMPAT": "true",
-            "NUM_HISTORY_SHARDS": temporalConfig.HistoryShards.toString(),
-        }
+        data: persistence.Config,
     },
     { provider: cluster.provider }
 )
@@ -383,7 +414,7 @@ new k8s.kustomize.Directory("benchmark-workers",
         ]
     },
     {
-        dependsOn: [workerConfig],
+        dependsOn: [temporalAutoSetup, workerConfig],
         provider: cluster.provider
     }
 );

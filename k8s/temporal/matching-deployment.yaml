@@ -6,7 +6,7 @@ metadata:
     app.kubernetes.io/instance: temporal
     app.kubernetes.io/name: temporal
     app.kubernetes.io/part-of: temporal
-    app.kubernetes.io/version: 1.18.1
+    app.kubernetes.io/version: 1.19.1
   name: temporal-matching
 spec:
   progressDeadlineSeconds: 600
@@ -29,7 +29,7 @@ spec:
         app.kubernetes.io/instance: temporal
         app.kubernetes.io/name: temporal
         app.kubernetes.io/part-of: temporal
-        app.kubernetes.io/version: 1.18.1
+        app.kubernetes.io/version: 1.19.1
     spec:
       containers:
       - env:
@@ -47,7 +47,7 @@ spec:
         envFrom:
         - configMapRef:
             name: temporal-env
-        image: temporalio/server:1.18.1
+        image: temporalio/server:1.19.1
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 3

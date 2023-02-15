@@ -347,7 +347,7 @@ const temporalAutoSetup = new k8s.batch.v1.Job("temporal-autosetup",
                     containers: [
                         {
                             name: "autosetup",
-                            image: "temporalio/auto-setup:1.18.1",
+                            image: "temporalio/auto-setup:1.19.1",
                             imagePullPolicy: "IfNotPresent",
                             command: ["/etc/temporal/auto-setup.sh"],
                             envFrom: [

@@ -19,7 +19,7 @@ spec:
     spec:
       initContainers:
         - name: create-namespace
-          image: temporalio/admin-tools:1.18.0
+          image: temporalio/admin-tools:1.19.1
           env:
           - name: TEMPORAL_CLI_ADDRESS
             value: "temporal-frontend:7233"

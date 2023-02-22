@@ -6,23 +6,6 @@ auto_refresh: 30s
 time: [now-1h, now]
 
 rows:
-  - name: K6
-    panels:
-      - timeseries:
-          title: VUs
-          datasource: prometheus
-          targets:
-            - prometheus:
-                query: sum(k6_vus)
-                legend: "VUs"
-      - timeseries:
-          title: Iterations
-          datasource: prometheus
-          targets:
-            - prometheus:
-                query: sum(rate(k6_iteration_duration_count[$__rate_interval]))
-                legend: "iterations/sec"
-
   - name: Metering
     panels:
       - timeseries:
@@ -30,17 +13,9 @@ rows:
           datasource: prometheus
           targets:
             - prometheus:
-                query: sum(rate(state_transition_count_sum[1m]))
+                query: sum(rate(state_transition_count_count[1m]))
                 legend: "st/s"
-      - timeseries:
-          title: Actions
-          datasource: prometheus
-          targets:
-            - prometheus:
-                query: sum(rate(action[1m]))
-                legend: "action/s"
-
-  - name: Polling
+  - name: Client
     panels:
       - timeseries:
           title: Workflow Task Polling Latency
@@ -48,15 +23,6 @@ rows:
           targets:
             - prometheus:
                 query: histogram_quantile(0.95, sum by(le) (rate(temporal_long_request_latency_bucket{job="benchmark-monitoring",namespace="default",operation="PollWorkflowTaskQueue"}[$__rate_interval])))
-                legend: p95
-          axis:
-            unit: s
-      - timeseries:
-          title: Workflow Task Schedule To Start Latency
-          datasource: prometheus
-          targets:
-            - prometheus:
-                query: histogram_quantile(0.95, sum by(le) (rate(temporal_workflow_task_schedule_to_start_latency_bucket{job="benchmark-monitoring",namespace="default"}[$__rate_interval])))
                 legend: p95
           axis:
             unit: s
@@ -70,6 +36,36 @@ rows:
           axis:
             unit: s
       - timeseries:
+          title: Poll Empty
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum(rate(temporal_activity_poll_no_task{job="benchmark-monitoring",namespace="default"}[$__rate_interval]))
+                legend: Activity
+            - prometheus:
+                query: sum(rate(temporal_workflow_task_queue_poll_empty{job="benchmark-monitoring",namespace="default"}[$__rate_interval]))
+                legend: Workflow
+      - timeseries:
+          title: Request Latency
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by (operation, le) (rate(temporal_request_latency_bucket{namespace="default"}[$__rate_interval])))
+                legend: "{{operation}}"
+          axis:
+            unit: s
+  - name: Schedule to Start
+    panels:
+      - timeseries:
+          title: Workflow Task Schedule To Start Latency
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by(le) (rate(temporal_workflow_task_schedule_to_start_latency_bucket{job="benchmark-monitoring",namespace="default"}[$__rate_interval])))
+                legend: p95
+          axis:
+            unit: s
+      - timeseries:
           title: Activity Schedule To Start Latency
           datasource: prometheus
           targets:
@@ -78,38 +74,15 @@ rows:
                 legend: p95
           axis:
             unit: s
+  - name: Workers
+    panels:
       - timeseries:
-          title: Poll Sync
+          title: Slots Available
           datasource: prometheus
           targets:
             - prometheus:
-                query: sum by (task_type) (rate(poll_success_sync[$__rate_interval])) / sum by (task_type) (rate(poll_success[$__rate_interval]))
-                legend: "{{task_type}}"
-          axis:
-            unit: percentunit
-      - timeseries:
-          title: Poll Sync Per Taskqueue
-          datasource: prometheus
-          targets:
-            - prometheus:
-                query: sum by (taskqueue) (rate(poll_success_sync_per_tl{taskqueue=~".*benchmark.*"}[$__rate_interval])) / sum by (taskqueue) (rate(poll_success_per_tl{taskqueue=~".*benchmark.*"}[$__rate_interval]))
-                legend: "{{taskqueue}}"
-          axis:
-            unit: percentunit
-      - timeseries:
-          title: Task Creation
-          datasource: prometheus
-          targets:
-            - prometheus:
-                query: sum(rate(persistence_requests{operation="CreateTask"}[$__rate_interval]))
-                legend: "tasks/s"
-      - timeseries:
-          title: Eager Activity Dispatch
-          datasource: prometheus
-          targets:
-            - prometheus:
-                query: sum(rate(activity_eager_execution[$__rate_interval]))
-                legend: "activities/s"
+                query: avg by (worker_type) (temporal_worker_task_slots_available{job="benchmark-monitoring",namespace="default"})
+                legend: "{{$worker_type}}"
       - timeseries:
           title: Sticky Cache
           datasource: prometheus
@@ -123,24 +96,139 @@ rows:
             - prometheus:
                 query: sum(rate(temporal_sticky_cache_total_forced_eviction{namespace="default"}[$__rate_interval]))
                 legend: "eviction"
-  - name: Workers
+  - name: History
     panels:
       - timeseries:
-          title: Slots Available
+          title: Task requests
           datasource: prometheus
           targets:
             - prometheus:
-                query: avg by (worker_type) (temporal_worker_task_slots_available{job="benchmark-monitoring",namespace="default"})
-                legend: "{{$worker_type}}"
+                query: sum by (operation) (rate(task_requests[$__rate_interval]))
+                legend: "{{operation}}"
+      - timeseries:
+          title: Task errors
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by (service_name, operation) (rate(task_errors[$__rate_interval]))
+      - timeseries:
+          title: Task processing latency
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by (operation, le) (rate(task_latency_processing_bucket[1m])))
+                legend: "{{operation}}"
+          axis:
+            unit: s
+      - timeseries:
+          title: Task latency
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by (operation, le) (rate(task_latency_bucket[1m])))
+                legend: "{{operation}}"
+          axis:
+            unit: s
+      - timeseries:
+          title: Task queue latency
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by (operation, le) (rate(task_latency_queue_bucket[1m])))
+                legend: "{{operation}}"
+          axis:
+            unit: s
+      - timeseries:
+          title: Task load latency
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by (operation, le) (rate(task_latency_load_bucket[1m])))
+                legend: "{{operation}}"
+          axis:
+            unit: s
+      - timeseries:
+          title: Task schedule latency
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by (operation, le) (rate(task_latency_schedule_bucket[1m])))
+                legend: "{{operation}}"
+          axis:
+            unit: s
+      - timeseries:
+          title: Task user latency
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by (operation, le) (rate(task_latency_user_bucket[1m])))
+                legend: "{{operation}}"
+          axis:
+            unit: s
+      - timeseries:
+          title: History Errors
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by(error_type) (rate(service_error_with_type{service_name="history"}[$__rate_interval]))
+                legend: "{{error_type}}"
+  - name: Matching
+    panels:
+      - timeseries:
+          title: Poll Sync
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by (task_type) (rate(poll_success_sync[$__rate_interval])) / sum by (task_type) (rate(poll_success[$__rate_interval]))
+                legend: "{{task_type}}"
+          axis:
+            unit: percentunit
+      - timeseries:
+          title: Matching Errors
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by(error_type) (rate(service_error_with_type{service_name="matching"}[$__rate_interval]))
+                legend: "{{error_type}}"
+      - timeseries:
+          title: Asyncmatch Latency
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by (operation, le) (rate(asyncmatch_latency_bucket{service_name=~"matching"}[$__rate_interval])))
+                legend: "{{operation}}"
+          axis:
+            unit: s
+      - timeseries:
+          title: Task Creation
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum(rate(persistence_requests{operation="CreateTasks"}[$__rate_interval]))
+                legend: "tasks/s"
+      - timeseries:
+          title: Matching Errors
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by(error_type) (rate(service_error_with_type{service_name="matching"}[$__rate_interval]))
+                legend: "{{error_type}}"
   - name: Persistence
     panels:
+      - timeseries:
+          title: Requests
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by (operation) (rate(persistence_requests[1m]))
+                legend: "{{operation}}"
       - timeseries:
           title: Workflow Latency
           datasource: prometheus
           targets:
             - prometheus:
                 query: histogram_quantile(0.95, sum by(operation, le) (rate(persistence_latency_bucket{operation=~".*Workflow.*"}[$__rate_interval])))
-                legend: "{{$operation}}"
+                legend: "{{operation}}"
           axis:
             unit: s
       - timeseries:
@@ -149,7 +237,7 @@ rows:
           targets:
             - prometheus:
                 query: histogram_quantile(0.95, sum by(operation, le) (rate(persistence_latency_bucket{operation=~".*Task.*"}[$__rate_interval])))
-                legend: "{{$operation}}"
+                legend: "{{operation}}"
           axis:
             unit: s
       - timeseries:
@@ -158,7 +246,7 @@ rows:
           targets:
             - prometheus:
                 query: histogram_quantile(0.95, sum by(operation, le) (rate(persistence_latency_bucket{operation=~".*Shard.*"}[$__rate_interval])))
-                legend: "{{$operation}}"
+                legend: "{{operation}}"
           axis:
             unit: s
       - timeseries:
@@ -167,9 +255,16 @@ rows:
           targets:
             - prometheus:
                 query: histogram_quantile(0.95, sum by(operation, le) (rate(persistence_latency_bucket{operation=~".*(Cluster|Namespace).*"}[$__rate_interval])))
-                legend: "{{$operation}}"
+                legend: "{{operation}}"
           axis:
             unit: s
+      - timeseries:
+          title: Errors
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by (error_type) (rate(persistence_error_with_type[$__rate_interval]))
+                legend: "{{error_type}}"
   - name: Locking
     panels:
       - timeseries:
@@ -190,33 +285,13 @@ rows:
                 legend: p95
           axis:
             unit: s
-  - name: Errors
+  - name: Resource Exhausted
     panels:
       - timeseries:
-          title: Frontend
+          title: Errors
           datasource: prometheus
           targets:
             - prometheus:
-                query: sum by(error_type) (rate(service_error_with_type{service_name="frontend"}[$__rate_interval]))
-                legend: "{{$error_type}}"
-      - timeseries:
-          title: Matching
-          datasource: prometheus
-          targets:
+                query: sum (rate(service_errors_resource_exhausted[$__rate_interval]))
             - prometheus:
-                query: sum by(error_type) (rate(service_error_with_type{service_name="matching"}[$__rate_interval]))
-                legend: "{{$error_type}}"
-      - timeseries:
-          title: History
-          datasource: prometheus
-          targets:
-            - prometheus:
-                query: sum by(error_type) (rate(service_error_with_type{service_name="history"}[$__rate_interval]))
-                legend: "{{$error_type}}"
-      - timeseries:
-          title: Persistence
-          datasource: prometheus
-          targets:
-            - prometheus:
-                query: sum by(error_type) (rate(persistence_error_with_type[$__rate_interval]))
-                legend: "{{$error_type}}"
+                query: sum (rate(persistence_errors_resource_exhausted[$__rate_interval]))

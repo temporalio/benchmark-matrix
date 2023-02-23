@@ -15,42 +15,92 @@ rows:
             - prometheus:
                 query: sum(rate(state_transition_count_count[1m]))
                 legend: "st/s"
-  - name: Client
+  - name: Polling
     panels:
       - timeseries:
-          title: Workflow Task Polling Latency
+          title: Polling Latency
           datasource: prometheus
           targets:
             - prometheus:
                 query: histogram_quantile(0.95, sum by(le) (rate(temporal_long_request_latency_bucket{job="benchmark-monitoring",namespace="default",operation="PollWorkflowTaskQueue"}[$__rate_interval])))
-                legend: p95
-          axis:
-            unit: s
-      - timeseries:
-          title: Activity Polling Latency
-          datasource: prometheus
-          targets:
+                legend: Workflow
             - prometheus:
                 query: histogram_quantile(0.95, sum by(le) (rate(temporal_long_request_latency_bucket{job="benchmark-monitoring",namespace="default",operation="PollActivityTaskQueue"}[$__rate_interval])))
-                legend: p95
+                legend: Activity
           axis:
             unit: s
       - timeseries:
-          title: Poll Empty
+          title: Poll Timeouts
           datasource: prometheus
           targets:
             - prometheus:
-                query: sum(rate(temporal_activity_poll_no_task{job="benchmark-monitoring",namespace="default"}[$__rate_interval]))
-                legend: Activity
+                query: sum by (task_type) (rate(poll_timeouts{namespace="default"}[$__rate_interval]))
+                legend: "{{task_type}}"
+      - timeseries:
+          title: Poller Count
+          datasource: prometheus
+          targets:
             - prometheus:
-                query: sum(rate(temporal_workflow_task_queue_poll_empty{job="benchmark-monitoring",namespace="default"}[$__rate_interval]))
-                legend: Workflow
+                query: sum by (poller_type) (temporal_num_pollers{namespace="default"})
+                legend: "{{poller_type}}"
+  - name: Matching
+    panels:
+      - timeseries:
+          title: Poll Sync
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by (task_type) (rate(poll_success_sync[$__rate_interval])) / sum by (task_type) (rate(poll_success[$__rate_interval]))
+                legend: "{{task_type}}"
+          axis:
+            unit: percentunit
+      - timeseries:
+          title: Asyncmatch Latency
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by (operation, le) (rate(asyncmatch_latency_bucket{service_name=~"matching"}[$__rate_interval])))
+                legend: "{{operation}}"
+          axis:
+            unit: s
+      - timeseries:
+          title: Matching Errors
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by(error_type) (rate(service_error_with_type{service_name="matching"}[$__rate_interval]))
+                legend: "{{error_type}}"
+  - name: Soak Tester
+    panels:
+      - timeseries:
+          title: Requests
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by (operation) (rate(temporal_request{container="benchmark-soak-test"}[$__rate_interval]))
+                legend: "{{operation}}"
       - timeseries:
           title: Request Latency
           datasource: prometheus
           targets:
             - prometheus:
-                query: histogram_quantile(0.95, sum by (operation, le) (rate(temporal_request_latency_bucket{namespace="default"}[$__rate_interval])))
+                query: histogram_quantile(0.95, sum by (operation, le) (rate(temporal_request_latency_bucket{container="benchmark-soak-test"}[$__rate_interval])))
+                legend: "{{operation}}"
+          axis:
+            unit: s
+      - timeseries:
+          title: Long Poll Requests
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by (operation) (rate(temporal_long_request{container="benchmark-soak-test"}[$__rate_interval]))
+                legend: "{{operation}}"
+      - timeseries:
+          title: Long Poll Request Latency
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by (operation, le) (rate(temporal_long_request_latency_bucket{container="benchmark-soak-test"}[$__rate_interval])))
                 legend: "{{operation}}"
           axis:
             unit: s
@@ -77,24 +127,40 @@ rows:
   - name: Workers
     panels:
       - timeseries:
+          title: Requests
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum by (operation) (rate(temporal_request{container="benchmark-workers"}[$__rate_interval]))
+                legend: "{{operation}}"
+      - timeseries:
+          title: Request Latency
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: histogram_quantile(0.95, sum by (operation, le) (rate(temporal_request_latency_bucket{container="benchmark-workers"}[$__rate_interval])))
+                legend: "{{operation}}"
+          axis:
+            unit: s
+      - timeseries:
           title: Slots Available
           datasource: prometheus
           targets:
             - prometheus:
-                query: avg by (worker_type) (temporal_worker_task_slots_available{job="benchmark-monitoring",namespace="default"})
+                query: avg by (worker_type) (temporal_worker_task_slots_available{container="benchmark-workers"})
                 legend: "{{$worker_type}}"
       - timeseries:
           title: Sticky Cache
           datasource: prometheus
           targets:
             - prometheus:
-                query: sum(rate(temporal_sticky_cache_hit{namespace="default"}[$__rate_interval]))
+                query: sum(rate(temporal_sticky_cache_hit{container="benchmark-workers"}[$__rate_interval]))
                 legend: "hit"
             - prometheus:
-                query: sum(rate(temporal_sticky_cache_miss{namespace="default"}[$__rate_interval]))
+                query: sum(rate(temporal_sticky_cache_miss{container="benchmark-workers"}[$__rate_interval]))
                 legend: "miss"
             - prometheus:
-                query: sum(rate(temporal_sticky_cache_total_forced_eviction{namespace="default"}[$__rate_interval]))
+                query: sum(rate(temporal_sticky_cache_total_forced_eviction{container="benchmark-workers"}[$__rate_interval]))
                 legend: "eviction"
   - name: History
     panels:
@@ -110,7 +176,8 @@ rows:
           datasource: prometheus
           targets:
             - prometheus:
-                query: sum by (service_name, operation) (rate(task_errors[$__rate_interval]))
+                query: sum by (operation) (rate(task_errors[$__rate_interval]))
+                legend: "{{operation}}"
       - timeseries:
           title: Task processing latency
           datasource: prometheus
@@ -171,47 +238,6 @@ rows:
           targets:
             - prometheus:
                 query: sum by(error_type) (rate(service_error_with_type{service_name="history"}[$__rate_interval]))
-                legend: "{{error_type}}"
-  - name: Matching
-    panels:
-      - timeseries:
-          title: Poll Sync
-          datasource: prometheus
-          targets:
-            - prometheus:
-                query: sum by (task_type) (rate(poll_success_sync[$__rate_interval])) / sum by (task_type) (rate(poll_success[$__rate_interval]))
-                legend: "{{task_type}}"
-          axis:
-            unit: percentunit
-      - timeseries:
-          title: Matching Errors
-          datasource: prometheus
-          targets:
-            - prometheus:
-                query: sum by(error_type) (rate(service_error_with_type{service_name="matching"}[$__rate_interval]))
-                legend: "{{error_type}}"
-      - timeseries:
-          title: Asyncmatch Latency
-          datasource: prometheus
-          targets:
-            - prometheus:
-                query: histogram_quantile(0.95, sum by (operation, le) (rate(asyncmatch_latency_bucket{service_name=~"matching"}[$__rate_interval])))
-                legend: "{{operation}}"
-          axis:
-            unit: s
-      - timeseries:
-          title: Task Creation
-          datasource: prometheus
-          targets:
-            - prometheus:
-                query: sum(rate(persistence_requests{operation="CreateTasks"}[$__rate_interval]))
-                legend: "tasks/s"
-      - timeseries:
-          title: Matching Errors
-          datasource: prometheus
-          targets:
-            - prometheus:
-                query: sum by(error_type) (rate(service_error_with_type{service_name="matching"}[$__rate_interval]))
                 legend: "{{error_type}}"
   - name: Persistence
     panels:
@@ -292,6 +318,8 @@ rows:
           datasource: prometheus
           targets:
             - prometheus:
-                query: sum (rate(service_errors_resource_exhausted[$__rate_interval]))
+                query: sum by (resource_exhausted_cause, operation) (rate(service_errors_resource_exhausted[$__rate_interval]))
+                legend: "{{resource_exhausted_cause}}: {{operation}}"
             - prometheus:
                 query: sum (rate(persistence_errors_resource_exhausted[$__rate_interval]))
+                legend: Persistence

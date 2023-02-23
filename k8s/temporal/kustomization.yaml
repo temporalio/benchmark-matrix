@@ -1,6 +1,8 @@
 resources:
 - frontend-service.yaml
 - frontend-deployment.yaml
+- internal-frontend-service.yaml
+- internal-frontend-deployment.yaml
 - worker-deployment.yaml
 - matching-deployment.yaml
 - history-deployment.yaml

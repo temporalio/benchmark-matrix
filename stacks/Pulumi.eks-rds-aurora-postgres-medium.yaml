@@ -1,0 +1,26 @@
+config:
+  aws:assumeRole:
+    roleArn: arn:aws:iam::912773994842:role/BenchmarkClusterAdmin
+  pulumi:template: kubernetes-go
+  temporal-benchmarks-k8s:Cluster:
+    EKS:
+      EnvironmentStackName: temporalio/temporal-benchmarks-aws-environment/main
+      NodeCount: 10
+      NodeType: m5.2xlarge
+  temporal-benchmarks-k8s:Persistence:
+    RDS:
+      Engine: aurora-postgresql
+      EngineVersion: 14.4
+      EnvironmentStackName: temporalio/temporal-benchmarks-aws-environment/main
+      InstanceType: db.r5.16xlarge
+  temporal-benchmarks-k8s:Temporal:
+    DynamicConfig: |
+      matching.numTaskqueueReadPartitions:
+      - value: 30
+      matching.numTaskqueueWritePartitions:
+      - value: 30
+    HistoryShards: 4096
+    TaskQueuePartitions: 30
+    WorkerCount: 30
+    WorkerWorkflowPollers: 60
+    WorkerActivityPollers: 60

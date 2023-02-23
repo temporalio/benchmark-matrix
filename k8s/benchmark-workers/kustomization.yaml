@@ -1,4 +1,0 @@
-resources:
-- deployment.yaml
-- monitoring-service.yaml
-- service-monitor.yaml

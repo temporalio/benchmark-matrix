@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: benchmark
+    app.kubernetes.io/component: soak-test
+  name: benchmark-soak-test
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: benchmark
+      app.kubernetes.io/component: soak-test
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: benchmark
+        app.kubernetes.io/component: soak-test
+    spec:
+      containers:
+      - image: ghcr.io/temporalio/benchmark-workers:main
+        imagePullPolicy: Always
+        name: benchmark-soak-test
+        command: ["runner", "-w", "-c", "100", "-t", "ExecuteActivity", '{ "Count": 3, "Activity": "Echo", "Input": { "Message": "test" } }']
+        env:
+        - name: TEMPORAL_GRPC_ENDPOINT
+          value: "temporal-frontend:7233"
+        - name: PROMETHEUS_ENDPOINT
+          value: 0.0.0.0:8000
+        - name: TEMPORAL_NAMESPACE
+          value: "default"
+        - name: TEMPORAL_TASK_QUEUE
+          value: "benchmark"
+        ports:
+        - name: metrics
+          containerPort: 8000
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 100m
+            memory: 32Mi
+          limits:
+            cpu: 200m
+            memory: 64Mi
+      restartPolicy: Always

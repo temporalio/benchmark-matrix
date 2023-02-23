@@ -1,0 +1,5 @@
+resources:
+- workers-deployment.yaml
+- soak-test-deployment.yaml
+- monitoring-service.yaml
+- service-monitor.yaml

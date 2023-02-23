@@ -2,19 +2,20 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app.kubernetes.io/component: matching
+    app.kubernetes.io/component: internal-frontend
     app.kubernetes.io/instance: temporal
     app.kubernetes.io/name: temporal
     app.kubernetes.io/part-of: temporal
     app.kubernetes.io/version: 1.20.0
-  name: temporal-matching
+  name: temporal-internal-frontend
+  namespace: default
 spec:
   progressDeadlineSeconds: 600
   replicas: 2
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app.kubernetes.io/component: matching
+      app.kubernetes.io/component: internal-frontend
       app.kubernetes.io/instance: temporal
       app.kubernetes.io/name: temporal
   strategy:
@@ -25,7 +26,7 @@ spec:
   template:
     metadata:
       labels:
-        app.kubernetes.io/component: matching
+        app.kubernetes.io/component: internal-frontend
         app.kubernetes.io/instance: temporal
         app.kubernetes.io/name: temporal
         app.kubernetes.io/part-of: temporal
@@ -39,7 +40,7 @@ spec:
               apiVersion: v1
               fieldPath: status.podIP
         - name: SERVICES
-          value: matching
+          value: internal-frontend
         - name: USE_INTERNAL_FRONTEND
           value: '1'
         - name: PROMETHEUS_ENDPOINT
@@ -62,18 +63,18 @@ spec:
         name: temporal
         ports:
         - name: rpc
-          containerPort: 7235
+          containerPort: 7236
           protocol: TCP
         - name: metrics
           containerPort: 8000
           protocol: TCP
         resources:
           requests:
-            cpu: 150m
-            memory: 64Mi
+            cpu: 800m
+            memory: 256Mi
           limits:
-            cpu: 200m
-            memory: 128Mi
+            cpu: 1000m
+            memory: 768Mi
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:

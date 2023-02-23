@@ -104,15 +104,20 @@ function createCluster(clusterConfig: ClusterConfig, persistenceConfig: Persiste
 
 function eksCluster(name: string, config: EKSClusterConfig, persistenceConfig: PersistenceConfig): Cluster {
     const envStack = new pulumi.StackReference('eksEnvironment' + config.EnvironmentStackName, { name: config.EnvironmentStackName });
-    
+    const identity = aws.getCallerIdentity({});
+    const role = pulumi.concat('arn:aws:iam::', identity.then(current => current.accountId), ':role/', envStack.getOutput('Role'));
+
+    const kubeconfigOptions: eks.KubeconfigOptions = { roleArn: role }
+
     const cluster = new eks.Cluster(name, {
+        providerCredentialOpts: kubeconfigOptions,
         vpcId: envStack.getOutput("VpcId"),
         publicSubnetIds: envStack.getOutput("PublicSubnetIds"),
         privateSubnetIds: envStack.getOutput("PrivateSubnetIds"),
         nodeAssociatePublicIpAddress: false,
-        desiredCapacity: 3,
-        minSize: 3,
-        maxSize: 3,
+        desiredCapacity: 10,
+        minSize: 10,
+        maxSize: 10,
     });
 
     cluster.createNodeGroup(name + '-temporal', {
@@ -347,7 +352,7 @@ const temporalAutoSetup = new k8s.batch.v1.Job("temporal-autosetup",
                     containers: [
                         {
                             name: "autosetup",
-                            image: "temporalio/auto-setup:1.19.1",
+                            image: "temporalio/auto-setup:1.20.0",
                             imagePullPolicy: "IfNotPresent",
                             command: ["/etc/temporal/auto-setup.sh"],
                             envFrom: [
@@ -406,9 +411,9 @@ new k8s.kustomize.Directory("temporal",
     }
 );
 
-new k8s.kustomize.Directory("benchmark-workers",
+new k8s.kustomize.Directory("benchmark",
     {
-        directory: "../k8s/benchmark-workers",
+        directory: "../k8s/benchmark",
         transformations: [
             scaleDeployment("benchmark-workers", temporalConfig.WorkerCount)
         ]

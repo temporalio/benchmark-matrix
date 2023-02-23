@@ -3,7 +3,7 @@ kind: ServiceMonitor
 metadata:
   name: benchmark-monitor
   labels:
-    app.kubernetes.io/name: benchmark-workers
+    app.kubernetes.io/name: benchmark
     app.kubernetes.io/component: monitoring
 spec:
   endpoints:
@@ -14,5 +14,5 @@ spec:
       - default
   selector:
     matchLabels:
-      app.kubernetes.io/name: benchmark-workers
+      app.kubernetes.io/name: benchmark
       app.kubernetes.io/component: monitoring

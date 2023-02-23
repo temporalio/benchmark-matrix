@@ -1,7 +1,7 @@
 import * as aws from "@pulumi/aws";
 import * as awsx from "@pulumi/awsx";
 
-const azCount = 2;
+const azCount = 3;
 
 export const AvailabilityZones = aws.getAvailabilityZones({state: "available"}).then(zones => zones.names.slice(0, azCount))
 
@@ -17,3 +17,4 @@ export const VpcId = vpc.id
 export const PrivateSubnetIds = vpc.privateSubnetIds
 export const PublicSubnetIds = vpc.publicSubnetIds
 export const RdsSubnetGroupName = rdsSubnetGroup.name
+export const Role = "BenchmarkClusterAdmin"

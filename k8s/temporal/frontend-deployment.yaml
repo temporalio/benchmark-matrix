@@ -6,12 +6,12 @@ metadata:
     app.kubernetes.io/instance: temporal
     app.kubernetes.io/name: temporal
     app.kubernetes.io/part-of: temporal
-    app.kubernetes.io/version: 1.19.1
+    app.kubernetes.io/version: 1.20.0
   name: temporal-frontend
   namespace: default
 spec:
   progressDeadlineSeconds: 600
-  replicas: 1
+  replicas: 2
   revisionHistoryLimit: 10
   selector:
     matchLabels:
@@ -30,7 +30,7 @@ spec:
         app.kubernetes.io/instance: temporal
         app.kubernetes.io/name: temporal
         app.kubernetes.io/part-of: temporal
-        app.kubernetes.io/version: 1.19.1
+        app.kubernetes.io/version: 1.20.0
     spec:
       containers:
       - env:
@@ -41,6 +41,8 @@ spec:
               fieldPath: status.podIP
         - name: SERVICES
           value: frontend
+        - name: USE_INTERNAL_FRONTEND
+          value: '1'
         - name: PROMETHEUS_ENDPOINT
           value: 0.0.0.0:8000
         - name: DYNAMIC_CONFIG_FILE_PATH
@@ -48,7 +50,7 @@ spec:
         envFrom:
         - configMapRef:
             name: temporal-env
-        image: temporalio/server:1.19.1
+        image: temporalio/server:1.20.0
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 3

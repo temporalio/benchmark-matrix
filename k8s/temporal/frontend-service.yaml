@@ -21,3 +21,4 @@ spec:
     app.kubernetes.io/name: temporal
   sessionAffinity: None
   type: ClusterIP
+  clusterIP: None

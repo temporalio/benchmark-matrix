@@ -31,7 +31,7 @@ spec:
         name: benchmark-workers
         env:
         - name: TEMPORAL_GRPC_ENDPOINT
-          value: "temporal-frontend:7233"
+          value: "dns:///temporal-frontend:7233"
         - name: PROMETHEUS_ENDPOINT
           value: 0.0.0.0:8000
         - name: TEMPORAL_NAMESPACE

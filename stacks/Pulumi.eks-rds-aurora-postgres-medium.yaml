@@ -12,15 +12,34 @@ config:
       Engine: aurora-postgresql
       EngineVersion: 14.4
       EnvironmentStackName: temporalio/temporal-benchmarks-aws-environment/main
-      InstanceType: db.r5.16xlarge
+      InstanceType: db.r5.4xlarge
   temporal-benchmarks-k8s:Temporal:
+    Frontend:
+      Pods: 3
+      CPU:
+        request: 1
+        limit: 1.25
+    History:
+      Shards: 4096
+      CPU:
+        request: 1.5
+        limit: 2
+    Matching:
+      TaskQueuePartitions: 4
+      CPU:
+        request: 750m
+        limit: 1000m
+    Workers:
+      Pods: 16
+      WorkflowPollers: 40
+      ActivityPollers: 80
+      CPU:
+        request: 150m
+        limit: 200m
+    SoakTest:
+      Pods: 2
     DynamicConfig: |
-      matching.numTaskqueueReadPartitions:
-      - value: 30
-      matching.numTaskqueueWritePartitions:
-      - value: 30
-    HistoryShards: 4096
-    TaskQueuePartitions: 30
-    WorkerCount: 30
-    WorkerWorkflowPollers: 60
-    WorkerActivityPollers: 60
+      frontend.rps:
+      - value: 2400
+      matching.rps:
+      - value: 2400

@@ -13,7 +13,7 @@ rows:
           datasource: prometheus
           targets:
             - prometheus:
-                query: sum(rate(state_transition_count_count[1m]))
+                query: sum(rate(state_transition_count_count[$__rate_interval]))
                 legend: "st/s"
   - name: Polling
     panels:

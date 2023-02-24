@@ -5,16 +5,55 @@ import * as k8s from "@pulumi/kubernetes";
 
 let config = new pulumi.Config();
 
-const historyPodCount = (shardCount: number) => shardCount / 512
-const matchingPodCount = (partitions: number) => partitions
+const historyPodCount = (config: HistoryConfig) => config.Shards / 512
+const matchingPodCount = (config: MatchingConfig) => config.TaskQueuePartitions
+
+const dynamicConfig = (config: TemporalConfig) => `
+matching.numTaskqueueReadPartitions:
+- value: ${config.Matching.TaskQueuePartitions}
+matching.numTaskqueueWritePartitions:
+- value: ${config.Matching.TaskQueuePartitions}
+${config.DynamicConfig || ""}
+`
 
 interface TemporalConfig {
-    HistoryShards: number;
-    TaskQueuePartitions: number;
-    WorkerCount: number;
-    WorkerWorkflowPollers: number;
-    WorkerActivityPollers: number;
     DynamicConfig: string;
+    Frontend: FrontendConfig;
+    History: HistoryConfig;
+    Matching: MatchingConfig;
+    Workers: WorkerConfig;
+    SoakTest: SoakTestConfig;
+}
+
+interface FrontendConfig {
+    Pods: number;
+    CPU: CPULimits;
+}
+
+interface HistoryConfig {
+    Shards: number;
+    CPU: CPULimits;
+}
+
+interface MatchingConfig {
+    TaskQueuePartitions: number;
+    CPU: CPULimits;
+}
+
+interface CPULimits {
+    request: string;
+    limit: string;
+}
+
+interface WorkerConfig {
+    Pods: number;
+    WorkflowPollers: number;
+    ActivityPollers: number;
+    CPU: CPULimits;
+}
+
+interface SoakTestConfig {
+    Pods: number;
 }
 
 interface Cluster {
@@ -82,14 +121,15 @@ function describeCluster(clusterConfig: ClusterConfig, persistenceConfig: Persis
     }
 
     summary += "Temporal:\n";
-    summary += `  History Shards: ${temporalConfig.HistoryShards}\n`;
-    summary += `  Matching: ${matchingPodCount(temporalConfig.TaskQueuePartitions)} pods\n`;
-    summary += `  History: ${historyPodCount(temporalConfig.HistoryShards)} pods\n`;
-    summary += `  Task queue partitions: ${temporalConfig.TaskQueuePartitions}\n`;
+    summary += `  History Shards: ${temporalConfig.History.Shards}\n`;
+    summary += `  Matching: ${matchingPodCount(temporalConfig.Matching)} pods\n`;
+    summary += `  History: ${historyPodCount(temporalConfig.History)} pods\n`;
+    summary += `  Task queue partitions: ${temporalConfig.Matching.TaskQueuePartitions}\n`;
+    summary += `  Dynamic config: "${dynamicConfig(temporalConfig)}"\n`;
     summary += "Benchmark Workers:\n";
-    summary += `  Pods: ${temporalConfig.WorkerCount}\n`;
-    summary += `  Workflow Pollers: ${temporalConfig.WorkerWorkflowPollers}\n`;
-    summary += `  Activity Pollers: ${temporalConfig.WorkerActivityPollers}\n`;
+    summary += `  Pods: ${temporalConfig.Workers.Pods}\n`;
+    summary += `  Workflow Pollers: ${temporalConfig.Workers.WorkflowPollers}\n`;
+    summary += `  Activity Pollers: ${temporalConfig.Workers.ActivityPollers}\n`;
 
     return summary;
 }
@@ -115,9 +155,9 @@ function eksCluster(name: string, config: EKSClusterConfig, persistenceConfig: P
         publicSubnetIds: envStack.getOutput("PublicSubnetIds"),
         privateSubnetIds: envStack.getOutput("PrivateSubnetIds"),
         nodeAssociatePublicIpAddress: false,
-        desiredCapacity: 10,
-        minSize: 10,
-        maxSize: 10,
+        desiredCapacity: 15,
+        minSize: 15,
+        maxSize: 15,
     });
 
     cluster.createNodeGroup(name + '-temporal', {
@@ -227,7 +267,7 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
                 "POSTGRES_PWD": "temporal",
                 "DBNAME": "temporal_persistence",
                 "VISIBILITY_DBNAME": "temporal_visibility",
-                "NUM_HISTORY_SHARDS": temporalConfig.HistoryShards.toString(),    
+                "NUM_HISTORY_SHARDS": temporalConfig.History.Shards.toString(),    
             }
         }    
     } else {
@@ -255,7 +295,7 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
                 "POSTGRES_PWD": "temporal",
                 "DBNAME": "temporal_persistence",
                 "VISIBILITY_DBNAME": "temporal_visibility",
-                "NUM_HISTORY_SHARDS": temporalConfig.HistoryShards.toString(),    
+                "NUM_HISTORY_SHARDS": temporalConfig.History.Shards.toString(),    
             }
         }    
     }
@@ -299,7 +339,7 @@ function cassandraPersistence(name: string, config: CassandraPersistenceConfig, 
             "CASSANDRA_PASSWORD": "temporal",
             "DBNAME": "temporal_persistence",
             "VISIBILITY_DBNAME": "temporal_visibility",
-            "NUM_HISTORY_SHARDS": temporalConfig.HistoryShards.toString(),    
+            "NUM_HISTORY_SHARDS": temporalConfig.History.Shards.toString(),    
         }
     }
 }
@@ -323,7 +363,7 @@ const temporalDynamicConfig = new k8s.core.v1.ConfigMap("temporal-dynamic-config
     {
         metadata: { name: "temporal-dynamic-config" },
         data: {
-            "dynamic_config.yaml": temporalConfig.DynamicConfig
+            "dynamic_config.yaml": dynamicConfig(temporalConfig)
         }
     },
     { provider: cluster.provider }
@@ -333,8 +373,8 @@ const workerConfig = new k8s.core.v1.ConfigMap("benchmark-worker-env",
     {
         metadata: { name: "benchmark-worker-env" },
         data: {
-            "TEMPORAL_WORKFLOW_TASK_POLLERS": temporalConfig.WorkerWorkflowPollers.toString(),
-			"TEMPORAL_ACTIVITY_TASK_POLLERS": temporalConfig.WorkerActivityPollers.toString(),
+            "TEMPORAL_WORKFLOW_TASK_POLLERS": temporalConfig.Workers.WorkflowPollers.toString(),
+			"TEMPORAL_ACTIVITY_TASK_POLLERS": temporalConfig.Workers.ActivityPollers.toString(),
         }
     },
     { provider: cluster.provider }
@@ -381,6 +421,15 @@ const scaleDeployment = (name: string, replicas: number) => {
     }
 }
 
+const setLimits = (name: string, cpu: CPULimits) => {
+    return (obj: any, opts: pulumi.CustomResourceOptions) => {
+        if (obj.kind === "Deployment" && obj.metadata.name === name) {
+            obj.spec.template.spec.containers[0].resources.requests.cpu = cpu.request
+            obj.spec.template.spec.containers[0].resources.limits.cpu = cpu.limit
+        }
+    }
+}
+
 const tolerateDedicated = (value: string) => {
     return (obj: any, opts: pulumi.CustomResourceOptions) => {
         if (obj.kind === "Deployment") {
@@ -400,8 +449,12 @@ new k8s.kustomize.Directory("temporal",
     {
         directory: "../k8s/temporal",
         transformations: [
-            scaleDeployment("temporal-history", historyPodCount(temporalConfig.HistoryShards)),
-            scaleDeployment("temporal-matching", matchingPodCount(temporalConfig.TaskQueuePartitions)),
+            scaleDeployment("temporal-frontend", temporalConfig.Frontend.Pods),
+            setLimits("temporal-frontend", temporalConfig.Frontend.CPU),
+            scaleDeployment("temporal-history", historyPodCount(temporalConfig.History)),
+            setLimits("temporal-history", temporalConfig.History.CPU),
+            scaleDeployment("temporal-matching", matchingPodCount(temporalConfig.Matching)),
+            setLimits("temporal-matching", temporalConfig.Matching.CPU),
             tolerateDedicated("temporal"),
         ]
     },
@@ -415,7 +468,9 @@ new k8s.kustomize.Directory("benchmark",
     {
         directory: "../k8s/benchmark",
         transformations: [
-            scaleDeployment("benchmark-workers", temporalConfig.WorkerCount)
+            scaleDeployment("benchmark-workers", temporalConfig.Workers.Pods),
+            setLimits("benchmark-workers", temporalConfig.Workers.CPU),
+            scaleDeployment("benchmark-soak-test", temporalConfig.SoakTest.Pods)
         ]
     },
     {

@@ -2,22 +2,26 @@ import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import * as eks from "@pulumi/eks";
 import * as k8s from "@pulumi/kubernetes";
+import * as jsyaml from "js-yaml";
 
 let config = new pulumi.Config();
+const envStack = new pulumi.StackReference(config.require('EnvironmentStackName'), { name: config.require('EnvironmentStackName') });
 
 const historyPodCount = (config: HistoryConfig) => config.Shards / 512
 const matchingPodCount = (config: MatchingConfig) => config.TaskQueuePartitions
 
-const dynamicConfig = (config: TemporalConfig) => `
-matching.numTaskqueueReadPartitions:
-- value: ${config.Matching.TaskQueuePartitions}
-matching.numTaskqueueWritePartitions:
-- value: ${config.Matching.TaskQueuePartitions}
-${config.DynamicConfig || ""}
-`
+const dynamicConfig = (config: TemporalConfig): pulumi.Output<Object> => {
+    const dc = config.DynamicConfig || {};
+    const matchingConfig = {
+        'matching.numTaskqueueReadPartitions': [{ value: config.Matching.TaskQueuePartitions }],
+        'matching.numTaskqueueWritePartitions': [{ value: config.Matching.TaskQueuePartitions }],
+    }
+
+    return pulumi.output({ ...dc, ...matchingConfig })
+}
 
 interface TemporalConfig {
-    DynamicConfig: string;
+    DynamicConfig: Object;
     Frontend: FrontendConfig;
     History: HistoryConfig;
     Matching: MatchingConfig;
@@ -61,6 +65,7 @@ interface Cluster {
     kubeconfig: pulumi.Output<any>;
     provider: k8s.Provider;
     securityGroup: pulumi.Output<string>;
+    instanceRoles: pulumi.Output<aws.iam.Role[]>;
 }
 
 interface EKSClusterConfig {
@@ -73,9 +78,14 @@ interface ClusterConfig {
     EKS: EKSClusterConfig | undefined;
 }
 
+interface VisibilityConfig {
+    OpenSearch: OpenSearchConfig;
+}
+
 interface PersistenceConfig {
     RDS: RDSPersistenceConfig | undefined;
     Cassandra: CassandraPersistenceConfig | undefined;
+    Visibility: VisibilityConfig;
 }
 
 interface RDSPersistenceConfig {
@@ -90,48 +100,62 @@ interface CassandraPersistenceConfig {
     NodeCount: number;
 };
 
-interface Persistence {
-    Config: pulumi.Input<{
-        [key: string]: pulumi.Input<string>;
-    }>
+type ConfigMapData = pulumi.Input<{[key: string]: pulumi.Input<string>}>;
+
+interface OpenSearchConfig {
+    InstanceType: string;
+    EngineVersion: string;
 }
 
-function describeCluster(clusterConfig: ClusterConfig, persistenceConfig: PersistenceConfig): string {
-    let summary = "";
-
-    summary += "Cluster:\n";
+function describeCluster(clusterConfig: ClusterConfig, persistenceConfig: PersistenceConfig): pulumi.Output<Object> {
+    let cluster = {};
+    let persistence = {};
+    let temporal = {};
+    let benchmark = {};
 
     if (clusterConfig.EKS) {
-        summary += "  Platform: EKS\n";
-        summary += `  Nodes: ${clusterConfig.EKS.NodeCount} x ${clusterConfig.EKS.NodeType}\n`;
+        cluster = {
+            "Platform": "EKS",
+            "Nodes": `${clusterConfig.EKS.NodeCount} x ${clusterConfig.EKS.NodeType}`,
+        }
     } else {
-        summary += "  Unknown cluster type\n";
+        throw("Unknown platform");
     }
-
-    summary += "Persistence:\n";
 
     if (persistenceConfig.RDS) {
-        summary += `  Engine: ${persistenceConfig.RDS.Engine}\n`;
-        summary += `  Instance: ${persistenceConfig.RDS.InstanceType}\n`;
+        persistence = {
+            "Engine": persistenceConfig.RDS.Engine,
+            "Instance": persistenceConfig.RDS.InstanceType,
+        }
     } else if (persistenceConfig.Cassandra) {
-        summary += `  Engine: Cassandra\n`;
-        summary += `  Instance: ${persistenceConfig.Cassandra.NodeCount} x ${persistenceConfig.Cassandra.NodeType}\n`;
+        persistence = {
+            "Engine": "Cassandra",
+            "Instance": `${persistenceConfig.Cassandra.NodeCount} x ${persistenceConfig.Cassandra.NodeType}`,
+        }
     } else {
-        summary += "  Unknown persistence system\n";
+        throw("Unknown persistence system");
     }
 
-    summary += "Temporal:\n";
-    summary += `  History Shards: ${temporalConfig.History.Shards}\n`;
-    summary += `  Matching: ${matchingPodCount(temporalConfig.Matching)} pods\n`;
-    summary += `  History: ${historyPodCount(temporalConfig.History)} pods\n`;
-    summary += `  Task queue partitions: ${temporalConfig.Matching.TaskQueuePartitions}\n`;
-    summary += `  Dynamic config: "${dynamicConfig(temporalConfig)}"\n`;
-    summary += "Benchmark Workers:\n";
-    summary += `  Pods: ${temporalConfig.Workers.Pods}\n`;
-    summary += `  Workflow Pollers: ${temporalConfig.Workers.WorkflowPollers}\n`;
-    summary += `  Activity Pollers: ${temporalConfig.Workers.ActivityPollers}\n`;
+    temporal = {
+        "History Shards": temporalConfig.History.Shards,
+        "Matching": `${matchingPodCount(temporalConfig.Matching)} pods`,
+        "History": `${historyPodCount(temporalConfig.History)} pods`,
+        "Task queue partitions": temporalConfig.Matching.TaskQueuePartitions,
+        "Dynamic config": dynamicConfig(temporalConfig),
+    }
 
-    return summary;
+    benchmark = {
+        "Pods": temporalConfig.Workers.Pods,
+        "Workflow Pollers": temporalConfig.Workers.WorkflowPollers,
+        "Activity Pollers": temporalConfig.Workers.ActivityPollers,
+    }
+
+    return pulumi.output({
+        "Cluster": cluster,
+        "Persistence": persistence,
+        "Temporal": temporal,
+        "Benchmark": benchmark,
+    });
 }
 
 function createCluster(clusterConfig: ClusterConfig, persistenceConfig: PersistenceConfig): Cluster {
@@ -143,7 +167,6 @@ function createCluster(clusterConfig: ClusterConfig, persistenceConfig: Persiste
 }
 
 function eksCluster(name: string, config: EKSClusterConfig, persistenceConfig: PersistenceConfig): Cluster {
-    const envStack = new pulumi.StackReference('eksEnvironment' + config.EnvironmentStackName, { name: config.EnvironmentStackName });
     const identity = aws.getCallerIdentity({});
     const role = pulumi.concat('arn:aws:iam::', identity.then(current => current.accountId), ':role/', envStack.getOutput('Role'));
 
@@ -195,28 +218,31 @@ function eksCluster(name: string, config: EKSClusterConfig, persistenceConfig: P
         kubeconfig: cluster.kubeconfig,
         provider: cluster.provider,
         securityGroup: cluster.nodeSecurityGroup.id,
+        instanceRoles: cluster.instanceRoles,
     }
 }
 
-function createPersistence(config: PersistenceConfig, cluster: Cluster): Persistence {
+function createPersistence(config: PersistenceConfig, cluster: Cluster): ConfigMapData {
+    let persistence: ConfigMapData | undefined;
+
     if (config.RDS != undefined) {
-        return rdsPersistence(pulumi.getStack(), config.RDS, cluster.securityGroup)
+        persistence = rdsPersistence(pulumi.getStack(), config.RDS, cluster.securityGroup);
     } else if (config.Cassandra != undefined) {
-        return cassandraPersistence(pulumi.getStack(), config.Cassandra, cluster)
+        persistence = cassandraPersistence(pulumi.getStack(), config.Cassandra, cluster);
     }
 
-    throw("invalid persistence config")
+    if (persistence == undefined) {
+        throw("invalid persistence config")
+    }
+
+    return { ...persistence, ...createAdvancedVisibility(config.Visibility, cluster) }
 }
 
-function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGroup: pulumi.Output<string>): Persistence {
-    const envStack = new pulumi.StackReference('rdsEnvironment', { name: config.EnvironmentStackName });
-
+function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGroup: pulumi.Output<string>): ConfigMapData {
     let dbType: string;
     let dbPort: number;
-    let dbPrefix: string;
 
     if (config.Engine == "postgres" || config.Engine == "aurora-postgresql") {
-        dbPrefix = "POSTGRES";
         dbType = "postgresql";
         dbPort = 5432;
     } else {
@@ -236,40 +262,36 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
         toPort: dbPort,
     });
 
+    let endpoint: pulumi.Output<String>;
+
     if (config.Engine == "aurora-postgresql") {
+        const engine = config.Engine;
+
         const rdsCluster = new aws.rds.Cluster(name, {
             availabilityZones: envStack.requireOutput('AvailabilityZones'),
             dbSubnetGroupName: envStack.requireOutput('RdsSubnetGroupName'),
             vpcSecurityGroupIds: [rdsSecurityGroup.id],
             clusterIdentifierPrefix: name,
-            engine: config.Engine,
+            engine: engine,
             engineVersion: config.EngineVersion,
             skipFinalSnapshot: true,
             masterUsername: "temporal",
             masterPassword: "temporal",
         });
 
-        new aws.rds.ClusterInstance(name, {
-            identifierPrefix: name,
-            clusterIdentifier: rdsCluster.id,
-            engine: config.Engine,
-            engineVersion: config.EngineVersion,
-            instanceClass: config.InstanceType,
+        pulumi.all([rdsCluster.id, rdsCluster.availabilityZones]).apply(([id, zones]) => {
+            zones.forEach((_, i) => {
+                new aws.rds.ClusterInstance(`${name}-${i}`, {
+                    identifierPrefix: name,
+                    clusterIdentifier: id,
+                    engine: engine,
+                    engineVersion: config.EngineVersion,
+                    instanceClass: config.InstanceType,
+                })    
+            })
         })
 
-        return {
-            Config: {
-                "DB": dbType,
-                "DB_PORT": dbPort.toString(),
-                "SQL_MAX_CONNS": "40",
-                "POSTGRES_SEEDS": rdsCluster.endpoint,
-                "POSTGRES_USER": "temporal",
-                "POSTGRES_PWD": "temporal",
-                "DBNAME": "temporal_persistence",
-                "VISIBILITY_DBNAME": "temporal_visibility",
-                "NUM_HISTORY_SHARDS": temporalConfig.History.Shards.toString(),    
-            }
-        }    
+        endpoint = rdsCluster.endpoint;
     } else {
         const rdsInstance = new aws.rds.Instance(name, {
             availabilityZone: envStack.requireOutput('AvailabilityZones').apply(zones => zones[0]),
@@ -285,23 +307,22 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
             password: "temporal",
         });
         
-        return {
-            Config: {
-                "DB": dbType,
-                "DB_PORT": dbPort.toString(),
-                "SQL_MAX_CONNS": "40",
-                "POSTGRES_SEEDS": rdsInstance.address,
-                "POSTGRES_USER": "temporal",
-                "POSTGRES_PWD": "temporal",
-                "DBNAME": "temporal_persistence",
-                "VISIBILITY_DBNAME": "temporal_visibility",
-                "NUM_HISTORY_SHARDS": temporalConfig.History.Shards.toString(),    
-            }
-        }    
+        endpoint = rdsInstance.address;
     }
+
+    return {
+        "NUM_HISTORY_SHARDS": temporalConfig.History.Shards.toString(),    
+        "DB": dbType,
+        "DB_PORT": dbPort.toString(),
+        "SQL_MAX_CONNS": "40",
+        "POSTGRES_SEEDS": endpoint.apply(s => s.toString()),
+        "POSTGRES_USER": "temporal",
+        "POSTGRES_PWD": "temporal",
+        "DBNAME": "temporal_persistence",    
+    };
 }
 
-function cassandraPersistence(name: string, config: CassandraPersistenceConfig, cluster: Cluster): Persistence {
+function cassandraPersistence(name: string, config: CassandraPersistenceConfig, cluster: Cluster): ConfigMapData {
     const namespace = new k8s.core.v1.Namespace("cassandra", { metadata: { name: "cassandra" } }, { provider: cluster.provider })
     
     new k8s.helm.v3.Chart('cassandra',
@@ -330,31 +351,180 @@ function cassandraPersistence(name: string, config: CassandraPersistenceConfig, 
     )
 
     return {
-        Config: {
-            "DB": "cassandra",
-            "DB_PORT": "9042",
-            "CASSANDRA_MAX_CONNS": "40",
-            "CASSANDRA_SEEDS": pulumi.output("cassandra.cassandra.svc.cluster.local"),
-            "CASSANDRA_USER": "temporal",
-            "CASSANDRA_PASSWORD": "temporal",
-            "DBNAME": "temporal_persistence",
-            "VISIBILITY_DBNAME": "temporal_visibility",
-            "NUM_HISTORY_SHARDS": temporalConfig.History.Shards.toString(),    
-        }
-    }
+        "NUM_HISTORY_SHARDS": temporalConfig.History.Shards.toString(),
+        "DB": "cassandra",
+        "DB_PORT": "9042",
+        "CASSANDRA_MAX_CONNS": "40",
+        "CASSANDRA_SEEDS": "cassandra.cassandra.svc.cluster.local",
+        "CASSANDRA_USER": "temporal",
+        "CASSANDRA_PASSWORD": "temporal",
+        "DBNAME": "temporal_persistence",
+    };
 }
+
+function opensearchVisibility(name: string, config: OpenSearchConfig, cluster: Cluster): ConfigMapData {
+    const opensearchSecurityGroup = new aws.ec2.SecurityGroup(name + "-opensearch", {
+        vpcId: envStack.getOutput("VpcId"),
+    });
+    
+    new aws.ec2.SecurityGroupRule(name + "-opensearch", {
+        securityGroupId: opensearchSecurityGroup.id,
+        type: 'ingress',
+        sourceSecurityGroupId: cluster.securityGroup,
+        protocol: "tcp",
+        fromPort: 443,
+        toPort: 443,
+    });
+
+    const zoneCount = envStack.getOutput("AvailabilityZones").apply(zones => zones.length)
+    const serviceLinkedRole = new aws.iam.ServiceLinkedRole("opensearch", { awsServiceName: "opensearchservice.amazonaws.com" });
+    const domain = new aws.opensearch.Domain(name, {
+        clusterConfig: {
+            instanceType: config.InstanceType,
+            instanceCount: zoneCount,
+            zoneAwarenessEnabled: true,
+            zoneAwarenessConfig: {
+                availabilityZoneCount: zoneCount,
+            }
+        },
+        vpcOptions: {
+            subnetIds: envStack.getOutput("PrivateSubnetIds"),
+            securityGroupIds: [opensearchSecurityGroup.id],
+        },
+        ebsOptions: {
+            ebsEnabled: true,
+            volumeSize: 35,
+            iops: 1000,
+        },
+        engineVersion: config.EngineVersion,
+    },
+    { dependsOn: [serviceLinkedRole] });
+    
+    const policy = new aws.iam.Policy("opensearch-access", {
+        description: "Opensearch Access",
+        policy: JSON.stringify(
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Action": [
+                            "es:*"
+                        ],
+                        "Effect": "Allow",
+                        "Resource": "*"
+                    }
+                ]
+            }        
+        )
+    })
+
+    cluster.instanceRoles.apply(roles => {
+        roles.forEach((role, i) => {
+            new aws.iam.RolePolicyAttachment(`opensearch-role-policy-${i}`, { role: role, policyArn: policy.arn })
+        })
+    })
+
+    new k8s.apps.v1.Deployment("opensearch-proxy", {
+        metadata: {
+            labels: {
+                "app.kubernetes.io/name": "opensearch-proxy",
+                "name": "opensearch-proxy",
+            }
+        },
+        spec: {
+            replicas: 2,
+            selector: {
+                matchLabels: {
+                    "app.kubernetes.io/name": "opensearch-proxy"
+                },
+            },
+            template: {
+                metadata: {
+                    labels: {
+                        "app.kubernetes.io/name": "opensearch-proxy",
+                    },
+                },
+                spec: {
+                    containers: [
+                        {
+                            image: "public.ecr.aws/aws-observability/aws-sigv4-proxy:latest",
+                            imagePullPolicy: "Always",
+                            name: "opensearch-proxy",
+                            args: [
+                                "--verbose",
+                                "--log-failed-requests",
+                                "--log-signing-process",
+                                "--no-verify-ssl",
+                                "--name", "es",
+                                "--region", aws.getRegion({}).then(region => region.name),
+                                "--host", domain.endpoint,
+                            ],
+                            ports: [
+                                {
+                                    name: "http",
+                                    containerPort: 8080,
+                                    protocol: "TCP",
+                                }
+                            ],
+                        },
+                    ],
+                    restartPolicy: "Always",
+                },  
+            },
+        },
+    },
+    { provider: cluster.provider })
+
+    new k8s.core.v1.Service("opensearch-proxy", {
+        metadata: {
+            name: "opensearch-proxy",
+            labels: {
+                "app.kubernetes.io/name": "opensearch-proxy",
+            }
+        },
+        spec: {
+            selector: {
+                "app.kubernetes.io/name": "opensearch-proxy",
+            },
+            ports: [
+                {
+                    name: "http",
+                    port: 80,
+                    protocol: "TCP",
+                    targetPort: "http",
+                }
+            ],
+        },
+    },
+    { provider: cluster.provider });
+
+    return {
+        "ENABLE_ES": "true",
+        "ES_SCHEMA": "http",
+        "ES_SEEDS": "opensearch-proxy.default.svc.cluster.local",
+        "ES_PORT": "80",
+    };
+};
+
+function createAdvancedVisibility(config: VisibilityConfig, cluster: Cluster): ConfigMapData {
+    if (config.OpenSearch != undefined) {
+        return opensearchVisibility("temporal-visibility", config.OpenSearch, cluster)
+    }
+
+    throw("invalid visibility config")
+};
 
 const temporalConfig = config.requireObject<TemporalConfig>('Temporal');
 const clusterConfig = config.requireObject<ClusterConfig>('Cluster')
 const persistenceConfig = config.requireObject<PersistenceConfig>('Persistence');
 
 const cluster = createCluster(clusterConfig, persistenceConfig);
-const persistence = createPersistence(persistenceConfig, cluster)
+const persistence = createPersistence(persistenceConfig, cluster);
 
 const temporalEnv = new k8s.core.v1.ConfigMap("temporal-env",
     {
         metadata: { name: "temporal-env" },
-        data: persistence.Config,
+        data: persistence,
     },
     { provider: cluster.provider }
 )
@@ -362,9 +532,7 @@ const temporalEnv = new k8s.core.v1.ConfigMap("temporal-env",
 const temporalDynamicConfig = new k8s.core.v1.ConfigMap("temporal-dynamic-config",
     {
         metadata: { name: "temporal-dynamic-config" },
-        data: {
-            "dynamic_config.yaml": dynamicConfig(temporalConfig)
-        }
+        data: { "dynamic_config.yaml": dynamicConfig(temporalConfig).apply(config => jsyaml.dump(config)) }
     },
     { provider: cluster.provider }
 )
@@ -402,7 +570,7 @@ const temporalAutoSetup = new k8s.batch.v1.Job("temporal-autosetup",
                             ]
                         }
                     ],
-                    restartPolicy: "Never"
+                    restartPolicy: "Never",
                 }
             }
         }

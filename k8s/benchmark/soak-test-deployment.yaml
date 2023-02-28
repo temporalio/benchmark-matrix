@@ -21,7 +21,7 @@ spec:
       - image: ghcr.io/temporalio/benchmark-workers:main
         imagePullPolicy: Always
         name: benchmark-soak-test
-        command: ["runner", "-w", "-c", "100", "-t", "ExecuteActivity", '{ "Count": 3, "Activity": "Echo", "Input": { "Message": "test" } }']
+        command: ["runner", "-w", "-c", "80", "-t", "ExecuteActivity", '{ "Count": 3, "Activity": "Echo", "Input": { "Message": "test" } }']
         env:
         - name: TEMPORAL_GRPC_ENDPOINT
           value: "dns:///temporal-frontend:7233"

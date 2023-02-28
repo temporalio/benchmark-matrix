@@ -9,6 +9,7 @@
         "@pulumi/awsx": "^0.40.0",
         "@pulumi/eks": "^0.42.5",
         "@pulumi/gcp": "^6.41.0",
-        "@pulumi/pulumi": "^3.0.0"
+        "@pulumi/pulumi": "^3.0.0",
+        "@types/js-yaml": "^4.0.5"
     }
 }

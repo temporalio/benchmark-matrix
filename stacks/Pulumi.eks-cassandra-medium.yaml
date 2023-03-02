@@ -3,18 +3,17 @@ config:
     roleArn: arn:aws:iam::912773994842:role/BenchmarkClusterAdmin
   aws:defaultTags:
     tags:
-      Stack: eks-rds-aurora-postgres-medium
+      Stack: eks-rds-cassandra-medium
   pulumi:template: kubernetes-go
   temporal-benchmarks-k8s:EnvironmentStackName: temporalio/temporal-benchmarks-aws-environment/main
   temporal-benchmarks-k8s:Cluster:
     EKS:
-      NodeCount: 5
+      NodeCount: 3
       NodeType: m5.2xlarge
   temporal-benchmarks-k8s:Persistence:
-    RDS:
-      Engine: aurora-postgresql
-      EngineVersion: 14.4
-      InstanceType: db.r5.8xlarge
+    Cassandra:
+      NodeCount: 3
+      NodeType: m5.xlarge
     Visibility:
       OpenSearch:
         EngineVersion: OpenSearch_2.3
@@ -28,11 +27,8 @@ config:
     History:
       Shards: 4096
       CPU:
-        request: 2
-        limit: 2.5
-      Memory:
-        request: 3Gi
-        limit: 4Gi
+        request: 1.5
+        limit: 2
     Matching:
       TaskQueuePartitions: 4
       CPU:
@@ -43,10 +39,10 @@ config:
       WorkflowPollers: 40
       ActivityPollers: 80
       CPU:
-        request: 250m
-        limit: 500m
+        request: 150m
+        limit: 200m
     SoakTest:
-      Pods: 2
+      Pods: 1
     DynamicConfig:
       frontend.rps:
       - value: 2400

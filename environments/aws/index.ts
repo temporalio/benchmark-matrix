@@ -13,6 +13,8 @@ const rdsSubnetGroup = new aws.rds.SubnetGroup("temporal-benchmark-rds", {
     subnetIds: vpc.publicSubnetIds
 });
 
+new aws.iam.ServiceLinkedRole("opensearch", { awsServiceName: "opensearchservice.amazonaws.com" })
+
 export const VpcId = vpc.id
 export const PrivateSubnetIds = vpc.privateSubnetIds
 export const PublicSubnetIds = vpc.publicSubnetIds

@@ -32,19 +32,27 @@ interface TemporalConfig {
 interface FrontendConfig {
     Pods: number;
     CPU: CPULimits;
+    Memory: MemoryLimits;
 }
 
 interface HistoryConfig {
     Shards: number;
     CPU: CPULimits;
+    Memory: MemoryLimits;
 }
 
 interface MatchingConfig {
     TaskQueuePartitions: number;
     CPU: CPULimits;
+    Memory: MemoryLimits;
 }
 
 interface CPULimits {
+    request: string;
+    limit: string;
+}
+
+interface MemoryLimits {
     request: string;
     limit: string;
 }
@@ -54,6 +62,7 @@ interface WorkerConfig {
     WorkflowPollers: number;
     ActivityPollers: number;
     CPU: CPULimits;
+    Memory: MemoryLimits;
 }
 
 interface SoakTestConfig {
@@ -178,9 +187,9 @@ function eksCluster(name: string, config: EKSClusterConfig, persistenceConfig: P
         publicSubnetIds: envStack.getOutput("PublicSubnetIds"),
         privateSubnetIds: envStack.getOutput("PrivateSubnetIds"),
         nodeAssociatePublicIpAddress: false,
-        desiredCapacity: 15,
-        minSize: 15,
-        maxSize: 15,
+        desiredCapacity: 10,
+        minSize: 10,
+        maxSize: 10,
     });
 
     cluster.createNodeGroup(name + '-temporal', {
@@ -314,7 +323,6 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
         "NUM_HISTORY_SHARDS": temporalConfig.History.Shards.toString(),    
         "DB": dbType,
         "DB_PORT": dbPort.toString(),
-        "SQL_MAX_CONNS": "40",
         "POSTGRES_SEEDS": endpoint.apply(s => s.toString()),
         "POSTGRES_USER": "temporal",
         "POSTGRES_PWD": "temporal",
@@ -354,7 +362,6 @@ function cassandraPersistence(name: string, config: CassandraPersistenceConfig, 
         "NUM_HISTORY_SHARDS": temporalConfig.History.Shards.toString(),
         "DB": "cassandra",
         "DB_PORT": "9042",
-        "CASSANDRA_MAX_CONNS": "40",
         "CASSANDRA_SEEDS": "cassandra.cassandra.svc.cluster.local",
         "CASSANDRA_USER": "temporal",
         "CASSANDRA_PASSWORD": "temporal",
@@ -377,7 +384,6 @@ function opensearchVisibility(name: string, config: OpenSearchConfig, cluster: C
     });
 
     const zoneCount = envStack.getOutput("AvailabilityZones").apply(zones => zones.length)
-    const serviceLinkedRole = new aws.iam.ServiceLinkedRole("opensearch", { awsServiceName: "opensearchservice.amazonaws.com" });
     const domain = new aws.opensearch.Domain(name, {
         clusterConfig: {
             instanceType: config.InstanceType,
@@ -397,8 +403,7 @@ function opensearchVisibility(name: string, config: OpenSearchConfig, cluster: C
             iops: 1000,
         },
         engineVersion: config.EngineVersion,
-    },
-    { dependsOn: [serviceLinkedRole] });
+    });
     
     const policy = new aws.iam.Policy("opensearch-access", {
         description: "Opensearch Access",
@@ -475,7 +480,7 @@ function opensearchVisibility(name: string, config: OpenSearchConfig, cluster: C
     },
     { provider: cluster.provider })
 
-    new k8s.core.v1.Service("opensearch-proxy", {
+    const service = new k8s.core.v1.Service("opensearch-proxy", {
         metadata: {
             name: "opensearch-proxy",
             labels: {
@@ -589,11 +594,22 @@ const scaleDeployment = (name: string, replicas: number) => {
     }
 }
 
-const setLimits = (name: string, cpu: CPULimits) => {
+const setLimits = (name: string, cpu: CPULimits, memory: MemoryLimits) => {
     return (obj: any, opts: pulumi.CustomResourceOptions) => {
         if (obj.kind === "Deployment" && obj.metadata.name === name) {
-            obj.spec.template.spec.containers[0].resources.requests.cpu = cpu.request
-            obj.spec.template.spec.containers[0].resources.limits.cpu = cpu.limit
+            const container = obj.spec.template.spec.containers[0];
+            if (cpu?.request) {
+                container.resources.requests.cpu = cpu.request
+            }
+            if (cpu?.limit) {
+                container.resources.limits.cpu = cpu.limit;
+            }
+            if (memory?.request) {
+                container.resources.requests.memory = memory.request
+            }
+            if (memory?.limit) {
+                container.resources.limits.memory = memory.limit;
+            }
         }
     }
 }
@@ -618,11 +634,11 @@ new k8s.kustomize.Directory("temporal",
         directory: "../k8s/temporal",
         transformations: [
             scaleDeployment("temporal-frontend", temporalConfig.Frontend.Pods),
-            setLimits("temporal-frontend", temporalConfig.Frontend.CPU),
+            setLimits("temporal-frontend", temporalConfig.Frontend.CPU, temporalConfig.Frontend.Memory),
             scaleDeployment("temporal-history", historyPodCount(temporalConfig.History)),
-            setLimits("temporal-history", temporalConfig.History.CPU),
+            setLimits("temporal-history", temporalConfig.History.CPU, temporalConfig.History.Memory),
             scaleDeployment("temporal-matching", matchingPodCount(temporalConfig.Matching)),
-            setLimits("temporal-matching", temporalConfig.Matching.CPU),
+            setLimits("temporal-matching", temporalConfig.Matching.CPU, temporalConfig.Matching.Memory),
             tolerateDedicated("temporal"),
         ]
     },
@@ -637,7 +653,7 @@ new k8s.kustomize.Directory("benchmark",
         directory: "../k8s/benchmark",
         transformations: [
             scaleDeployment("benchmark-workers", temporalConfig.Workers.Pods),
-            setLimits("benchmark-workers", temporalConfig.Workers.CPU),
+            setLimits("benchmark-workers", temporalConfig.Workers.CPU, temporalConfig.Workers.Memory),
             scaleDeployment("benchmark-soak-test", temporalConfig.SoakTest.Pods)
         ]
     },

@@ -239,6 +239,13 @@ rows:
             - prometheus:
                 query: sum by(error_type) (rate(service_error_with_type{service_name="history"}[$__rate_interval]))
                 legend: "{{error_type}}"
+      - timeseries:
+          title: Shard distribution
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: numshards_gauge
+                legend: "{{pod}}"
   - name: Persistence
     panels:
       - timeseries:

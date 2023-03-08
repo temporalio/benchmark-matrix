@@ -250,10 +250,20 @@ function createPersistence(config: PersistenceConfig, cluster: Cluster): ConfigM
 function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGroup: pulumi.Output<string>): ConfigMapData {
     let dbType: string;
     let dbPort: number;
+    let dbPrefix: string;
+    let dbExtras: ConfigMapData = {};
 
     if (config.Engine == "postgres" || config.Engine == "aurora-postgresql") {
         dbType = "postgresql";
         dbPort = 5432;
+        dbPrefix = "POSTGRES";
+    } else if (config.Engine == "mysql" || config.Engine == "aurora-mysql") {
+        dbType = "mysql";
+        dbPort = 3306;
+        dbPrefix = "MYSQL";
+        dbExtras = {
+            "MYSQL_TX_ISOLATION_COMPAT": "true"
+        };
     } else {
         throw("invalid RDS config");
     }
@@ -273,7 +283,7 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
 
     let endpoint: pulumi.Output<String>;
 
-    if (config.Engine == "aurora-postgresql") {
+    if (config.Engine == "aurora-postgresql" || config.Engine == "aurora-mysql") {
         const engine = config.Engine;
 
         const rdsCluster = new aws.rds.Cluster(name, {
@@ -289,44 +299,48 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
         });
 
         pulumi.all([rdsCluster.id, rdsCluster.availabilityZones]).apply(([id, zones]) => {
-            zones.forEach((_, i) => {
-                new aws.rds.ClusterInstance(`${name}-${i}`, {
+            zones.forEach((z, _) => {
+                new aws.rds.ClusterInstance(`${name}-${z}`, {
                     identifierPrefix: name,
                     clusterIdentifier: id,
+                    availabilityZone: z,
                     engine: engine,
                     engineVersion: config.EngineVersion,
                     instanceClass: config.InstanceType,
+                    performanceInsightsEnabled: true,
                 })    
             })
         })
 
         endpoint = rdsCluster.endpoint;
     } else {
-        const rdsInstance = new aws.rds.Instance(name, {
-            availabilityZone: envStack.requireOutput('AvailabilityZones').apply(zones => zones[0]),
+        const engine = config.Engine;
+
+        const rdsCluster = new aws.rds.Cluster(name, {
+            allocatedStorage: 1024,
+            availabilityZones: envStack.requireOutput('AvailabilityZones'),
             dbSubnetGroupName: envStack.requireOutput('RdsSubnetGroupName'),
             vpcSecurityGroupIds: [rdsSecurityGroup.id],
-            identifierPrefix: name,
-            allocatedStorage: 100,
-            engine: config.Engine,
+            clusterIdentifierPrefix: name,
+            engine: engine,
             engineVersion: config.EngineVersion,
-            instanceClass: config.InstanceType,
             skipFinalSnapshot: true,
-            username: "temporal",
-            password: "temporal",
+            masterUsername: "temporal",
+            masterPassword: "temporal",
         });
         
-        endpoint = rdsInstance.address;
+        endpoint = rdsCluster.endpoint;
     }
 
     return {
         "NUM_HISTORY_SHARDS": temporalConfig.History.Shards.toString(),    
         "DB": dbType,
         "DB_PORT": dbPort.toString(),
-        "POSTGRES_SEEDS": endpoint.apply(s => s.toString()),
-        "POSTGRES_USER": "temporal",
-        "POSTGRES_PWD": "temporal",
-        "DBNAME": "temporal_persistence",    
+        [`${dbPrefix}_SEEDS`]: endpoint.apply(s => s.toString()),
+        [`${dbPrefix}_USER`]: "temporal",
+        [`${dbPrefix}_PWD`]: "temporal",
+        "DBNAME": "temporal_persistence",
+        ...dbExtras,
     };
 }
 
@@ -480,7 +494,7 @@ function opensearchVisibility(name: string, config: OpenSearchConfig, cluster: C
     },
     { provider: cluster.provider })
 
-    const service = new k8s.core.v1.Service("opensearch-proxy", {
+    new k8s.core.v1.Service("opensearch-proxy", {
         metadata: {
             name: "opensearch-proxy",
             labels: {

@@ -3,17 +3,17 @@ config:
     roleArn: arn:aws:iam::912773994842:role/BenchmarkClusterAdmin
   aws:defaultTags:
     tags:
-      Stack: eks-rds-postgres-medium
+      Stack: eks-rds-aurora-mysql-medium
   pulumi:template: kubernetes-go
   temporal-benchmarks-k8s:EnvironmentStackName: temporalio/temporal-benchmarks-aws-environment/main
   temporal-benchmarks-k8s:Cluster:
     EKS:
-      NodeCount: 3
+      NodeCount: 5
       NodeType: m5.2xlarge
   temporal-benchmarks-k8s:Persistence:
     RDS:
-      Engine: postgres
-      EngineVersion: 14.4
+      Engine: aurora-mysql
+      EngineVersion: 5.7.mysql_aurora.2.11.1
       InstanceType: db.r5.4xlarge
     Visibility:
       OpenSearch:
@@ -21,27 +21,30 @@ config:
         InstanceType: m5.large.search
   temporal-benchmarks-k8s:Temporal:
     Frontend:
-      Pods: 3
+      Pods: 4
       CPU:
         request: 1.5
         limit: 2
     History:
       Shards: 4096
       CPU:
-        request: 1.5
-        limit: 2
+        request: 2.5
+        limit: 3
+      Memory:
+        request: 3Gi
+        limit: 4Gi
     Matching:
       TaskQueuePartitions: 4
       CPU:
-        request: 750m
-        limit: 1000m
+        request: 1
+        limit: 1.5
     Workers:
       Pods: 16
       WorkflowPollers: 40
       ActivityPollers: 80
       CPU:
-        request: 150m
-        limit: 200m
+        request: 250m
+        limit: 500m
     SoakTest:
       Pods: 2
     DynamicConfig:
@@ -49,11 +52,3 @@ config:
       - value: 2400
       matching.rps:
       - value: 2400
-      frontend.persistenceMaxQPS:
-      - value: 1200
-      history.persistenceMaxQPS:
-      - value: 1200
-      matching.persistenceMaxQPS:
-      - value: 1200
-      worker.persistenceMaxQPS:
-      - value: 1200

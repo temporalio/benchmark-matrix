@@ -8,7 +8,7 @@ config:
   temporal-benchmarks-k8s:EnvironmentStackName: temporalio/temporal-benchmarks-aws-environment/main
   temporal-benchmarks-k8s:Cluster:
     EKS:
-      NodeCount: 5
+      NodeCount: 9
       NodeType: m5.2xlarge
   temporal-benchmarks-k8s:Persistence:
     RDS:
@@ -31,8 +31,8 @@ config:
         request: 2.5
         limit: 3
       Memory:
-        request: 3Gi
-        limit: 4Gi
+        request: 5Gi
+        limit: 6Gi
     Matching:
       TaskQueuePartitions: 4
       CPU:

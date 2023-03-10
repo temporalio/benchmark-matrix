@@ -638,6 +638,41 @@ const tolerateDedicated = (value: string) => {
     }
 }
 
+const cloudwatchNamespace = new k8s.core.v1.Namespace("amazon-cloudwatch", { metadata: { name: "amazon-cloudwatch" } }, { provider: cluster.provider })
+const fluentBitConfig = new k8s.core.v1.ConfigMap("fluent-bit-cluster-info",
+    {
+        metadata: {
+            namespace: cloudwatchNamespace.metadata.name,
+            name: "fluent-bit-cluster-info"
+        },
+        data: {
+            "cluster.name": cluster.name,
+            "http.server": "Off",
+            "http.port": "2020",
+            "read.head": "Off",
+            "read.tail": "On",
+            "logs.region": aws.getRegion({}).then(region => region.name),
+        }
+    },
+    { provider: cluster.provider },
+)
+
+cluster.instanceRoles.apply(roles => {
+    roles.forEach((role, i) => {
+        new aws.iam.RolePolicyAttachment(`cloudwatch-role-policy-${i}`, { role: role, policyArn: "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy" })
+    })
+})
+
+new k8s.yaml.ConfigFile("fluent-bit",
+    {
+        file: "https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/fluent-bit/fluent-bit.yaml"
+    },
+    {
+        provider: cluster.provider,
+        dependsOn: [fluentBitConfig],
+    }
+)
+
 new k8s.kustomize.Directory("monitoring",
     { directory: "../k8s/monitoring" },
     { provider: cluster.provider }

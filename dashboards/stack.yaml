@@ -13,8 +13,29 @@ rows:
           datasource: prometheus
           targets:
             - prometheus:
-                query: sum(rate(state_transition_count_count[$__rate_interval]))
+                query: sum(rate(state_transition_count_count{namespace="default"}[$__rate_interval]))
                 legend: "st/s"
+      - timeseries:
+          title: Actions
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum(rate(action{namespace="default"}[$__rate_interval]))
+                legend: "action/sec"
+      - timeseries:
+          title: Workflow Completions
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum(rate(temporal_workflow_completed{namespace="default"}[$__rate_interval]))
+                legend: "workflows/sec"
+      - timeseries:
+          title: Activity Executions
+          datasource: prometheus
+          targets:
+            - prometheus:
+                query: sum(rate(temporal_activity_execution_latency_count{namespace="default"}[$__rate_interval]))
+                legend: "activity/sec"
   - name: Polling
     panels:
       - timeseries:

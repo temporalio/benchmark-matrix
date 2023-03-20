@@ -6,7 +6,7 @@ metadata:
     app.kubernetes.io/component: soak-test
   name: benchmark-soak-test
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: benchmark
@@ -21,7 +21,7 @@ spec:
       - image: ghcr.io/temporalio/benchmark-workers:main
         imagePullPolicy: Always
         name: benchmark-soak-test
-        command: ["runner", "-w", "-c", "80", "-t", "ExecuteActivity", '{ "Count": 3, "Activity": "Echo", "Input": { "Message": "test" } }']
+        command: ["runner", "-w", "-c", "$(CONCURRENT_WORKFLOWS)", "-t", "ExecuteActivity", '{ "Count": 3, "Activity": "Echo", "Input": { "Message": "test" } }']
         env:
         - name: TEMPORAL_GRPC_ENDPOINT
           value: "dns:///temporal-frontend:7233"
@@ -31,6 +31,9 @@ spec:
           value: "default"
         - name: TEMPORAL_TASK_QUEUE
           value: "benchmark"
+        envFrom:
+        - configMapRef:
+            name: benchmark-soaktest-env
         ports:
         - name: metrics
           containerPort: 8000

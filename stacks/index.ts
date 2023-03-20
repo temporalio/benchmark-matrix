@@ -66,7 +66,7 @@ interface WorkerConfig {
 }
 
 interface SoakTestConfig {
-    Pods: number;
+    ConcurrentWorkflows: number;
 }
 
 interface Cluster {
@@ -88,7 +88,7 @@ interface ClusterConfig {
 }
 
 interface VisibilityConfig {
-    OpenSearch: OpenSearchConfig;
+    OpenSearch: OpenSearchConfig | undefined;
 }
 
 interface PersistenceConfig {
@@ -102,6 +102,7 @@ interface RDSPersistenceConfig {
     Engine: string;
     EngineVersion: string;
     InstanceType: string;
+    SingleAZ: boolean;
 }
 
 interface CassandraPersistenceConfig {
@@ -116,55 +117,9 @@ interface OpenSearchConfig {
     EngineVersion: string;
 }
 
-function describeCluster(clusterConfig: ClusterConfig, persistenceConfig: PersistenceConfig): pulumi.Output<Object> {
-    let cluster = {};
-    let persistence = {};
-    let temporal = {};
-    let benchmark = {};
-
-    if (clusterConfig.EKS) {
-        cluster = {
-            "Platform": "EKS",
-            "Nodes": `${clusterConfig.EKS.NodeCount} x ${clusterConfig.EKS.NodeType}`,
-        }
-    } else {
-        throw("Unknown platform");
-    }
-
-    if (persistenceConfig.RDS) {
-        persistence = {
-            "Engine": persistenceConfig.RDS.Engine,
-            "Instance": persistenceConfig.RDS.InstanceType,
-        }
-    } else if (persistenceConfig.Cassandra) {
-        persistence = {
-            "Engine": "Cassandra",
-            "Instance": `${persistenceConfig.Cassandra.NodeCount} x ${persistenceConfig.Cassandra.NodeType}`,
-        }
-    } else {
-        throw("Unknown persistence system");
-    }
-
-    temporal = {
-        "History Shards": temporalConfig.History.Shards,
-        "Matching": `${matchingPodCount(temporalConfig.Matching)} pods`,
-        "History": `${historyPodCount(temporalConfig.History)} pods`,
-        "Task queue partitions": temporalConfig.Matching.TaskQueuePartitions,
-        "Dynamic config": dynamicConfig(temporalConfig),
-    }
-
-    benchmark = {
-        "Pods": temporalConfig.Workers.Pods,
-        "Workflow Pollers": temporalConfig.Workers.WorkflowPollers,
-        "Activity Pollers": temporalConfig.Workers.ActivityPollers,
-    }
-
-    return pulumi.output({
-        "Cluster": cluster,
-        "Persistence": persistence,
-        "Temporal": temporal,
-        "Benchmark": benchmark,
-    });
+interface Monitoring {
+    GrafanaEndpoint: pulumi.Output<string>;
+    PrometheusEndpoint: pulumi.Output<string>;
 }
 
 function createCluster(clusterConfig: ClusterConfig, persistenceConfig: PersistenceConfig): Cluster {
@@ -298,21 +253,39 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
             masterPassword: "temporal",
         });
 
-        pulumi.all([rdsCluster.id, rdsCluster.availabilityZones]).apply(([id, zones]) => {
+        rdsCluster.availabilityZones.apply((zones) => {
             zones.forEach((z, _) => {
                 new aws.rds.ClusterInstance(`${name}-${z}`, {
                     identifierPrefix: name,
-                    clusterIdentifier: id,
+                    clusterIdentifier: rdsCluster.id,
                     availabilityZone: z,
                     engine: engine,
                     engineVersion: config.EngineVersion,
                     instanceClass: config.InstanceType,
                     performanceInsightsEnabled: true,
-                })    
+                })
             })
         })
 
         endpoint = rdsCluster.endpoint;
+    } else if (config.SingleAZ) {
+        const engine = config.Engine;
+
+        const rdsInstance = new aws.rds.Instance(name, {
+            allocatedStorage: 1024,
+            availabilityZone: envStack.requireOutput('AvailabilityZones').apply(zones => zones[0]),
+            dbSubnetGroupName: envStack.requireOutput('RdsSubnetGroupName'),
+            vpcSecurityGroupIds: [rdsSecurityGroup.id],
+            identifierPrefix: name,
+            engine: engine,
+            engineVersion: config.EngineVersion,
+            instanceClass: config.InstanceType,
+            skipFinalSnapshot: true,
+            username: "temporal",
+            password: "temporal",
+        });
+        
+        endpoint = rdsInstance.address;
     } else {
         const engine = config.Engine;
 
@@ -324,6 +297,7 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
             clusterIdentifierPrefix: name,
             engine: engine,
             engineVersion: config.EngineVersion,
+            dbClusterInstanceClass: config.InstanceType,
             skipFinalSnapshot: true,
             masterUsername: "temporal",
             masterPassword: "temporal",
@@ -379,6 +353,7 @@ function cassandraPersistence(name: string, config: CassandraPersistenceConfig, 
         "CASSANDRA_SEEDS": "cassandra.cassandra.svc.cluster.local",
         "CASSANDRA_USER": "temporal",
         "CASSANDRA_PASSWORD": "temporal",
+        "CASSANDRA_REPLICATION_FACTOR": "3",
         "DBNAME": "temporal_persistence",
     };
 }
@@ -526,11 +501,103 @@ function opensearchVisibility(name: string, config: OpenSearchConfig, cluster: C
 };
 
 function createAdvancedVisibility(config: VisibilityConfig, cluster: Cluster): ConfigMapData {
-    if (config.OpenSearch != undefined) {
+    if (config?.OpenSearch != undefined) {
         return opensearchVisibility("temporal-visibility", config.OpenSearch, cluster)
     }
 
-    throw("invalid visibility config")
+    return {}
+};
+
+function createMonitoring(cluster: Cluster): Monitoring {
+    const cloudwatchNamespace = new k8s.core.v1.Namespace("amazon-cloudwatch", { metadata: { name: "amazon-cloudwatch" } }, { provider: cluster.provider })
+    const fluentBitConfig = new k8s.core.v1.ConfigMap("fluent-bit-cluster-info",
+        {
+            metadata: {
+                namespace: cloudwatchNamespace.metadata.name,
+                name: "fluent-bit-cluster-info"
+            },
+            data: {
+                "cluster.name": cluster.name,
+                "http.server": "Off",
+                "http.port": "2020",
+                "read.head": "Off",
+                "read.tail": "On",
+                "logs.region": aws.getRegion({}).then(region => region.name),
+            }
+        },
+        { provider: cluster.provider },
+    )
+    
+    cluster.instanceRoles.apply(roles => {
+        roles.forEach((role, i) => {
+            new aws.iam.RolePolicyAttachment(`cloudwatch-role-policy-${i}`, { role: role, policyArn: "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy" })
+        })
+    })
+    
+    new k8s.yaml.ConfigFile("fluent-bit",
+        {
+            file: "https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/fluent-bit/fluent-bit.yaml"
+        },
+        {
+            provider: cluster.provider,
+            dependsOn: [fluentBitConfig],
+        }
+    )
+    
+    const prometheus = new aws.amp.Workspace("prometheus")
+
+    const workspaceRole = new aws.iam.Role(
+        "workspaceRole",
+        {
+            assumeRolePolicy: JSON.stringify({
+                Version: "2012-10-17",
+                Statement: [{
+                    Action: "sts:AssumeRole",
+                    Effect: "Allow",
+                    Sid: "",
+                    Principal: {
+                        Service: "grafana.amazonaws.com",
+                    },
+                }],
+            })
+        }
+    );
+    const grafana = new aws.grafana.Workspace(
+        "grafana",
+        {
+            accountAccessType: "CURRENT_ACCOUNT",
+            authenticationProviders: ["AWS_SSO"],
+            dataSources: ['AMAZON_OPENSEARCH_SERVICE', 'CLOUDWATCH', 'PROMETHEUS'],
+            permissionType: "SERVICE_MANAGED",
+            roleArn: workspaceRole.arn,
+        }
+    );
+
+    pulumi.all([aws.getRegion({}), prometheus.prometheusEndpoint]).apply(([region, endpoint]) => {
+        new k8s.kustomize.Directory("monitoring",
+            {
+                directory: "../k8s/monitoring",
+                transformations: [
+                    configureRemoteWrite("k8s", region.name, endpoint),
+                ],
+            },
+            { provider: cluster.provider }
+        );
+    })
+
+    new aws.iam.RolePolicyAttachment("grafana-prometheus-query-role-policy", { role: workspaceRole, policyArn: "arn:aws:iam::aws:policy/AmazonPrometheusQueryAccess" })
+
+    cluster.instanceRoles.apply(roles => {
+        roles.forEach((role, i) => {
+            new aws.iam.RolePolicyAttachment(`instance-prometheus-remote-write-role-policy-${i}`, { role: role, policyArn: "arn:aws:iam::aws:policy/AmazonPrometheusRemoteWriteAccess" })
+            new aws.iam.RolePolicyAttachment(`instance-prometheus-query-role-policy-${i}`, { role: role, policyArn: "arn:aws:iam::aws:policy/AmazonPrometheusQueryAccess" })
+        })
+    })
+
+    return {
+        GrafanaEndpoint: grafana.endpoint,
+        PrometheusEndpoint: prometheus.prometheusEndpoint,
+    };
 };
 
 const temporalConfig = config.requireObject<TemporalConfig>('Temporal');
@@ -567,6 +634,17 @@ const workerConfig = new k8s.core.v1.ConfigMap("benchmark-worker-env",
     { provider: cluster.provider }
 )
 
+const soakTestConfig = new k8s.core.v1.ConfigMap("benchmark-soaktest-env",
+    {
+        metadata: { name: "benchmark-soaktest-env" },
+        data: {
+            "CONCURRENT_WORKFLOWS": temporalConfig.SoakTest.ConcurrentWorkflows.toString(),
+        }
+    },
+    { provider: cluster.provider }
+)
+
+
 const temporalAutoSetup = new k8s.batch.v1.Job("temporal-autosetup",
     {
         metadata: {
@@ -599,6 +677,27 @@ const temporalAutoSetup = new k8s.batch.v1.Job("temporal-autosetup",
         provider: cluster.provider
     }
 )
+
+const configureRemoteWrite = (name: string, region: string, endpoint: string) => {
+    return (obj: any, opts: pulumi.CustomResourceOptions) => {
+        if (obj.kind === "Prometheus" && obj.metadata.name === name) {
+            obj.spec.replicaExternalLabelName = ""
+            obj.spec.remoteWrite = [
+                {
+                    url: endpoint + 'api/v1/remote_write',
+                    sigv4: {
+                        region: region,
+                    },
+                    queue_config: {
+                        max_samples_per_send: 1000,
+                        max_shards: 200,
+                        capacity: 2500,
+                    }
+                }
+            ]
+        }
+    }
+}
 
 const scaleDeployment = (name: string, replicas: number) => {
     return (obj: any, opts: pulumi.CustomResourceOptions) => {
@@ -638,45 +737,7 @@ const tolerateDedicated = (value: string) => {
     }
 }
 
-const cloudwatchNamespace = new k8s.core.v1.Namespace("amazon-cloudwatch", { metadata: { name: "amazon-cloudwatch" } }, { provider: cluster.provider })
-const fluentBitConfig = new k8s.core.v1.ConfigMap("fluent-bit-cluster-info",
-    {
-        metadata: {
-            namespace: cloudwatchNamespace.metadata.name,
-            name: "fluent-bit-cluster-info"
-        },
-        data: {
-            "cluster.name": cluster.name,
-            "http.server": "Off",
-            "http.port": "2020",
-            "read.head": "Off",
-            "read.tail": "On",
-            "logs.region": aws.getRegion({}).then(region => region.name),
-        }
-    },
-    { provider: cluster.provider },
-)
-
-cluster.instanceRoles.apply(roles => {
-    roles.forEach((role, i) => {
-        new aws.iam.RolePolicyAttachment(`cloudwatch-role-policy-${i}`, { role: role, policyArn: "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy" })
-    })
-})
-
-new k8s.yaml.ConfigFile("fluent-bit",
-    {
-        file: "https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/fluent-bit/fluent-bit.yaml"
-    },
-    {
-        provider: cluster.provider,
-        dependsOn: [fluentBitConfig],
-    }
-)
-
-new k8s.kustomize.Directory("monitoring",
-    { directory: "../k8s/monitoring" },
-    { provider: cluster.provider }
-);
+export const monitoring = createMonitoring(cluster);
 
 new k8s.kustomize.Directory("temporal",
     {
@@ -703,15 +764,13 @@ new k8s.kustomize.Directory("benchmark",
         transformations: [
             scaleDeployment("benchmark-workers", temporalConfig.Workers.Pods),
             setLimits("benchmark-workers", temporalConfig.Workers.CPU, temporalConfig.Workers.Memory),
-            scaleDeployment("benchmark-soak-test", temporalConfig.SoakTest.Pods)
         ]
     },
     {
-        dependsOn: [temporalAutoSetup, workerConfig],
+        dependsOn: [temporalAutoSetup, workerConfig, soakTestConfig],
         provider: cluster.provider
     }
 );
 
 export const clusterName = cluster.name;
 export const kubeconfig = cluster.kubeconfig;
-export const clusterSummary = describeCluster(clusterConfig, persistenceConfig);

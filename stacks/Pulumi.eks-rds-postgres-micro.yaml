@@ -40,4 +40,4 @@ config:
         request: 150m
         limit: 200m
     SoakTest:
-      ConcurrentWorkflows: 25
+      ConcurrentWorkflows: 15

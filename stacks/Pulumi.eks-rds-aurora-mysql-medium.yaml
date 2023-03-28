@@ -14,39 +14,50 @@ config:
     RDS:
       Engine: aurora-mysql
       EngineVersion: 5.7.mysql_aurora.2.11.1
-      InstanceType: db.r5.8xlarge
+      InstanceType: db.r5.4xlarge
     Visibility:
       OpenSearch:
         EngineVersion: OpenSearch_2.3
-        InstanceType: m5.large.search
+        InstanceType: c6g.large.search
   temporal-benchmarks-k8s:Temporal:
     Frontend:
       Pods: 4
       CPU:
         request: 1.5
         limit: 2
+      Memory:
+        request: 256Mi
+        limit: 512Mi
     History:
       Shards: 4096
+      Pods: 8
       CPU:
-        request: 2.5
-        limit: 3
+        request: 3
+        limit: 3.5
       Memory:
         request: 5Gi
         limit: 6Gi
     Matching:
+      Pods: 4
       TaskQueuePartitions: 4
       CPU:
         request: 1
         limit: 1.5
+      Memory:
+        request: 150Mi
+        limit: 250Mi        
     Workers:
       Pods: 16
       WorkflowPollers: 40
-      ActivityPollers: 80
+      ActivityPollers: 120
       CPU:
         request: 250m
-        limit: 500m
+        limit: 400m
+      Memory:
+        request: 25Mi
+        limit: 50Mi
     SoakTest:
-      Pods: 2
+      ConcurrentWorkflows: 140
     DynamicConfig:
       frontend.rps:
       - value: 2400

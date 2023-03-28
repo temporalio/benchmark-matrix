@@ -1,14 +1,13 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: temporal-frontend
   labels:
     app.kubernetes.io/component: frontend
     app.kubernetes.io/instance: temporal
     app.kubernetes.io/name: temporal
     app.kubernetes.io/part-of: temporal
     app.kubernetes.io/version: 1.20.0
-  name: temporal-frontend
-  namespace: default
 spec:
   progressDeadlineSeconds: 600
   replicas: 2
@@ -41,8 +40,6 @@ spec:
               fieldPath: status.podIP
         - name: SERVICES
           value: frontend
-        - name: USE_INTERNAL_FRONTEND
-          value: '1'
         - name: PROMETHEUS_ENDPOINT
           value: 0.0.0.0:8000
         - name: DYNAMIC_CONFIG_FILE_PATH

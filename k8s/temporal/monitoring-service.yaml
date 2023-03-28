@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
+  name: temporal-monitoring
   labels:
     app.kubernetes.io/instance: temporal
     app.kubernetes.io/name: temporal
     app.kubernetes.io/part-of: temporal
     app.kubernetes.io/version: 1.18.0
     app.kubernetes.io/component: monitoring
-  name: temporal-monitoring
 spec:
   type: ClusterIP
   clusterIP: None

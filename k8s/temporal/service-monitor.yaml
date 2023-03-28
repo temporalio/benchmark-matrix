@@ -12,7 +12,7 @@ spec:
     interval: 30s
   namespaceSelector:
     matchNames:
-      - default
+      - temporal
   selector:
     matchLabels:
       app.kubernetes.io/name: temporal

@@ -24,7 +24,7 @@ spec:
         command: ["runner", "-w", "-c", "$(CONCURRENT_WORKFLOWS)", "-t", "ExecuteActivity", '{ "Count": 3, "Activity": "Echo", "Input": { "Message": "test" } }']
         env:
         - name: TEMPORAL_GRPC_ENDPOINT
-          value: "dns:///temporal-frontend:7233"
+          value: "dns:///temporal-frontend.temporal.svc.cluster.local:7233"
         - name: PROMETHEUS_ENDPOINT
           value: 0.0.0.0:8000
         - name: TEMPORAL_NAMESPACE

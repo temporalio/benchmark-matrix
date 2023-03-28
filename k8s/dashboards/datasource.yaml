@@ -1,0 +1,26 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: external-prometheus
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "external-grafana"
+  datasource:
+    name: prometheus
+    type: prometheus
+    access: proxy
+    isDefault: true
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: cloudwatch
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "external-grafana"
+  datasource:
+    name: cloudwatch
+    type: cloudwatch
+    access: proxy

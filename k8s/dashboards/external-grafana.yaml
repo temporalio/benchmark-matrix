@@ -1,0 +1,13 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: Grafana
+metadata:
+  name: external-grafana
+  namespace: monitoring
+  labels:
+    dashboards: "external-grafana"
+spec:
+  external:
+    url: http://external-grafana-proxy.monitoring.svc.cluster.local
+    apiKey:
+      name: external-grafana-apikey
+      key: key

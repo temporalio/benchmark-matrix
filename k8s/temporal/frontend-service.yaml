@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
+  name: temporal-frontend
   labels:
     app.kubernetes.io/component: frontend
     app.kubernetes.io/instance: temporal
     app.kubernetes.io/name: temporal
     app.kubernetes.io/part-of: temporal
     app.kubernetes.io/version: 1.18.0
-  name: temporal-frontend
 spec:
   internalTrafficPolicy: Cluster
   ports:

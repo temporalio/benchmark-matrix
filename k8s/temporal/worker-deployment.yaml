@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: temporal-worker
   labels:
     app.kubernetes.io/component: worker
     app.kubernetes.io/instance: temporal
     app.kubernetes.io/name: temporal
     app.kubernetes.io/part-of: temporal
     app.kubernetes.io/version: 1.20.0
-  name: temporal-worker
 spec:
   progressDeadlineSeconds: 600
-  replicas: 2
+  replicas: 1
   revisionHistoryLimit: 10
   selector:
     matchLabels:
@@ -40,8 +40,6 @@ spec:
               fieldPath: status.podIP
         - name: SERVICES
           value: worker
-        - name: USE_INTERNAL_FRONTEND
-          value: '1'
         - name: PROMETHEUS_ENDPOINT
           value: 0.0.0.0:8000
         - name: DYNAMIC_CONFIG_FILE_PATH
@@ -61,11 +59,11 @@ spec:
           protocol: TCP
         resources:
           requests:
-            cpu: 50m
-            memory: 128Mi
+            cpu: 20m
+            memory: 50Mi
           limits:
-            cpu: 100m
-            memory: 256Mi
+            cpu: 30m
+            memory: 100Mi
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:

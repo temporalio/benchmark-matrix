@@ -7,9 +7,6 @@ import * as jsyaml from "js-yaml";
 let config = new pulumi.Config();
 const envStack = new pulumi.StackReference(config.require('EnvironmentStackName'), { name: config.require('EnvironmentStackName') });
 
-const historyPodCount = (config: HistoryConfig) => config.Shards / 512
-const matchingPodCount = (config: MatchingConfig) => config.TaskQueuePartitions
-
 const dynamicConfig = (config: TemporalConfig): pulumi.Output<Object> => {
     const dc = config.DynamicConfig || {};
     const matchingConfig = {
@@ -37,12 +34,14 @@ interface FrontendConfig {
 
 interface HistoryConfig {
     Shards: number;
+    Pods: number;
     CPU: CPULimits;
     Memory: MemoryLimits;
 }
 
 interface MatchingConfig {
     TaskQueuePartitions: number;
+    Pods: number;
     CPU: CPULimits;
     Memory: MemoryLimits;
 }
@@ -108,6 +107,7 @@ interface RDSPersistenceConfig {
 interface CassandraPersistenceConfig {
     NodeType: string;
     NodeCount: number;
+    ReplicaCount: number;
 };
 
 type ConfigMapData = pulumi.Input<{[key: string]: pulumi.Input<string>}>;
@@ -321,7 +321,19 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
 function cassandraPersistence(name: string, config: CassandraPersistenceConfig, cluster: Cluster): ConfigMapData {
     const namespace = new k8s.core.v1.Namespace("cassandra", { metadata: { name: "cassandra" } }, { provider: cluster.provider })
     
-    new k8s.helm.v3.Chart('cassandra',
+    const ebsDriver = new aws.eks.Addon("aws-ebs-csi-driver", {
+        clusterName: cluster.name,
+        addonName: "aws-ebs-csi-driver",
+        addonVersion: "v1.17.0-eksbuild.1",
+    });
+    
+    cluster.instanceRoles.apply(roles => {
+        roles.forEach((role, i) => {
+            new aws.iam.RolePolicyAttachment(`ebs-driver-role-policy-${i}`, { role: role, policyArn: "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy" })
+        })
+    })
+
+    const cassandra = new k8s.helm.v3.Chart('cassandra',
         {
             chart: "cassandra",
             version: "9.7.5",
@@ -334,16 +346,16 @@ function cassandraPersistence(name: string, config: CassandraPersistenceConfig, 
                     "user": "temporal",
                     "password": "temporal",
                 },
-                "replicaCount": config.NodeCount,
+                "replicaCount": config.ReplicaCount,
                 "persistence": {
-                    "enabled": false,
+                    "commitLogMountPath": "/bitnami/cassandra/commitlog",
                 },
                 "tolerations": [
                     { key: "dedicated", operator: "Equal", value: "cassandra", effect: "NoSchedule" },
                 ],
             },
         },
-        { dependsOn: namespace, provider: cluster.provider }
+        { dependsOn: [namespace, ebsDriver], provider: cluster.provider }
     )
 
     return {
@@ -418,7 +430,7 @@ function opensearchVisibility(name: string, config: OpenSearchConfig, cluster: C
         })
     })
 
-    new k8s.apps.v1.Deployment("opensearch-proxy", {
+    const proxyDeployment = new k8s.apps.v1.Deployment("opensearch-proxy", {
         metadata: {
             labels: {
                 "app.kubernetes.io/name": "opensearch-proxy",
@@ -469,7 +481,7 @@ function opensearchVisibility(name: string, config: OpenSearchConfig, cluster: C
     },
     { provider: cluster.provider })
 
-    new k8s.core.v1.Service("opensearch-proxy", {
+    const proxyService = new k8s.core.v1.Service("opensearch-proxy", {
         metadata: {
             name: "opensearch-proxy",
             labels: {
@@ -490,12 +502,12 @@ function opensearchVisibility(name: string, config: OpenSearchConfig, cluster: C
             ],
         },
     },
-    { provider: cluster.provider });
+    { provider: cluster.provider, dependsOn: [proxyDeployment] });
 
     return {
         "ENABLE_ES": "true",
         "ES_SCHEMA": "http",
-        "ES_SEEDS": "opensearch-proxy.default.svc.cluster.local",
+        "ES_SEEDS": pulumi.all([proxyService]).apply(() => "opensearch-proxy.default.svc.cluster.local"),
         "ES_PORT": "80",
     };
 };
@@ -567,7 +579,6 @@ function createMonitoring(cluster: Cluster): Monitoring {
         {
             accountAccessType: "CURRENT_ACCOUNT",
             authenticationProviders: ["AWS_SSO"],
-            dataSources: ['AMAZON_OPENSEARCH_SERVICE', 'CLOUDWATCH', 'PROMETHEUS'],
             permissionType: "SERVICE_MANAGED",
             roleArn: workspaceRole.arn,
         }
@@ -586,12 +597,57 @@ function createMonitoring(cluster: Cluster): Monitoring {
     })
 
     new aws.iam.RolePolicyAttachment("grafana-prometheus-query-role-policy", { role: workspaceRole, policyArn: "arn:aws:iam::aws:policy/AmazonPrometheusQueryAccess" })
+    new aws.iam.RolePolicyAttachment("grafana-cloudwatch-role-policy", { role: workspaceRole, policyArn: "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess" })
+    new aws.iam.RolePolicyAttachment("grafana-tag-role-policy", { role: workspaceRole, policyArn: "arn:aws:iam::aws:policy/ResourceGroupsandTagEditorReadOnlyAccess" })
 
     cluster.instanceRoles.apply(roles => {
         roles.forEach((role, i) => {
             new aws.iam.RolePolicyAttachment(`instance-prometheus-remote-write-role-policy-${i}`, { role: role, policyArn: "arn:aws:iam::aws:policy/AmazonPrometheusRemoteWriteAccess" })
             new aws.iam.RolePolicyAttachment(`instance-prometheus-query-role-policy-${i}`, { role: role, policyArn: "arn:aws:iam::aws:policy/AmazonPrometheusQueryAccess" })
         })
+    })
+
+    const apiKey = new aws.grafana.WorkspaceApiKey(
+        "external-grafana-editor",
+        {
+            keyName: "external-grafana-editor",
+            keyRole: "ADMIN",
+            secondsToLive: 60 * 60 * 24 * 30,
+            workspaceId: grafana.id,
+        }
+    )
+
+    pulumi.all([aws.getRegion({}), grafana.endpoint, prometheus.prometheusEndpoint]).apply(([region, grafanaEndpoint, prometheusEndpoint]) => {
+        const dashboards = new k8s.kustomize.Directory("dashboards",
+            {
+                directory: "../k8s/dashboards",
+                transformations: [
+                    configureExternalGrafana("external-grafana", grafanaEndpoint),
+                    configureAWSDatasource("external-prometheus", region.name, prometheusEndpoint),
+                    configureAWSDatasource("cloudwatch", region.name, ""),
+                    (obj: any, opts: pulumi.CustomResourceOptions) => {
+                        if (obj.kind === "Deployment" && obj.metadata.name === "grafana-operator-controller-manager") {
+                            obj.spec.template.spec.containers[0].image = "ghcr.io/grafana-operator/grafana-operator:v5.0.0-rc0"
+                        }
+                    }
+                ]
+            },
+            { provider: cluster.provider }
+        );
+
+        new k8s.core.v1.Secret(
+            "external-grafana-apikey",
+            {
+                metadata: {
+                    namespace: "grafana-operator",
+                    name: "external-grafana-apikey",
+                },
+                stringData: {
+                    key: apiKey.key,
+                }
+            },
+            { provider: cluster.provider, dependsOn: [dashboards] }
+        )    
     })
 
     return {
@@ -607,9 +663,11 @@ const persistenceConfig = config.requireObject<PersistenceConfig>('Persistence')
 const cluster = createCluster(clusterConfig, persistenceConfig);
 const persistence = createPersistence(persistenceConfig, cluster);
 
+const temporalNamespace = new k8s.core.v1.Namespace("temporal", { metadata: { name: "temporal" } }, { provider: cluster.provider })
+
 const temporalEnv = new k8s.core.v1.ConfigMap("temporal-env",
     {
-        metadata: { name: "temporal-env" },
+        metadata: { name: "temporal-env", namespace: temporalNamespace.metadata.name },
         data: persistence,
     },
     { provider: cluster.provider }
@@ -617,7 +675,7 @@ const temporalEnv = new k8s.core.v1.ConfigMap("temporal-env",
 
 const temporalDynamicConfig = new k8s.core.v1.ConfigMap("temporal-dynamic-config",
     {
-        metadata: { name: "temporal-dynamic-config" },
+        metadata: { name: "temporal-dynamic-config", namespace: temporalNamespace.metadata.name },
         data: { "dynamic_config.yaml": dynamicConfig(temporalConfig).apply(config => jsyaml.dump(config)) }
     },
     { provider: cluster.provider }
@@ -638,17 +696,17 @@ const soakTestConfig = new k8s.core.v1.ConfigMap("benchmark-soaktest-env",
     {
         metadata: { name: "benchmark-soaktest-env" },
         data: {
-            "CONCURRENT_WORKFLOWS": temporalConfig.SoakTest.ConcurrentWorkflows.toString(),
+            "CONCURRENT_WORKFLOWS": Math.ceil(temporalConfig.SoakTest.ConcurrentWorkflows / temporalConfig.Frontend.Pods).toString(),
         }
     },
     { provider: cluster.provider }
 )
 
-
 const temporalAutoSetup = new k8s.batch.v1.Job("temporal-autosetup",
     {
         metadata: {
-            name: "temporal-autosetup"
+            name: "temporal-autosetup",
+            namespace: temporalNamespace.metadata.name,
         },
         spec: {
             backoffLimit: 3,
@@ -678,9 +736,33 @@ const temporalAutoSetup = new k8s.batch.v1.Job("temporal-autosetup",
     }
 )
 
+const configureAWSDatasource = (name: string, region: string, endpoint: string) => {
+    return (obj: any, opts: pulumi.CustomResourceOptions) => {
+        if (obj.kind === "GrafanaDatasource" && obj.metadata.name === name) {
+            if (endpoint != "") {
+                obj.spec.datasource.url = endpoint
+            }
+            obj.spec.datasource.jsonData = {
+                sigV4Auth: true,
+                sigV4AuthType: "ec2_iam_role",
+                sigV4Region: region,
+            }
+        }
+    }
+}
+
+const configureExternalGrafana = (name: string, endpoint: string) => {
+    return (obj: any, opts: pulumi.CustomResourceOptions) => {
+        if (obj.kind === "Grafana" && obj.metadata.name === name) {
+            obj.spec.external.url = "https://" + endpoint
+        }
+    }
+}
+
 const configureRemoteWrite = (name: string, region: string, endpoint: string) => {
     return (obj: any, opts: pulumi.CustomResourceOptions) => {
         if (obj.kind === "Prometheus" && obj.metadata.name === name) {
+            obj.spec.replicas = 1
             obj.spec.replicaExternalLabelName = ""
             obj.spec.remoteWrite = [
                 {
@@ -692,7 +774,18 @@ const configureRemoteWrite = (name: string, region: string, endpoint: string) =>
                         max_samples_per_send: 1000,
                         max_shards: 200,
                         capacity: 2500,
-                    }
+                    },
+                    writeRelabelConfigs: [
+                        {
+                            sourceLabels: ["exported_namespace"],
+                            regex: '(.+)',
+                            targetLabel: "namespace",
+                        },
+                        {
+                            regex: "exported_namespace",
+                            action: "labeldrop",
+                        }
+                    ],
                 }
             ]
         }
@@ -745,15 +838,15 @@ new k8s.kustomize.Directory("temporal",
         transformations: [
             scaleDeployment("temporal-frontend", temporalConfig.Frontend.Pods),
             setLimits("temporal-frontend", temporalConfig.Frontend.CPU, temporalConfig.Frontend.Memory),
-            scaleDeployment("temporal-history", historyPodCount(temporalConfig.History)),
+            scaleDeployment("temporal-history", temporalConfig.History.Pods),
             setLimits("temporal-history", temporalConfig.History.CPU, temporalConfig.History.Memory),
-            scaleDeployment("temporal-matching", matchingPodCount(temporalConfig.Matching)),
+            scaleDeployment("temporal-matching", temporalConfig.Matching.Pods),
             setLimits("temporal-matching", temporalConfig.Matching.CPU, temporalConfig.Matching.Memory),
             tolerateDedicated("temporal"),
         ]
     },
     {
-        dependsOn: [temporalEnv, temporalDynamicConfig, temporalAutoSetup],
+        dependsOn: [temporalNamespace, temporalEnv, temporalDynamicConfig, temporalAutoSetup],
         provider: cluster.provider
     }
 );
@@ -764,6 +857,7 @@ new k8s.kustomize.Directory("benchmark",
         transformations: [
             scaleDeployment("benchmark-workers", temporalConfig.Workers.Pods),
             setLimits("benchmark-workers", temporalConfig.Workers.CPU, temporalConfig.Workers.Memory),
+            scaleDeployment("benchmark-soak-test", temporalConfig.Frontend.Pods),
         ]
     },
     {

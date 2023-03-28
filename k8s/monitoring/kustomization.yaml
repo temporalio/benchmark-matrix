@@ -8,3 +8,5 @@ secretGenerator:
       disableNameSuffixHash: true
   files:
   - grafana.ini
+resources:
+- prometheus-rbacTemporal.yaml

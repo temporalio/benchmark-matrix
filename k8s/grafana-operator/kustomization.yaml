@@ -2,8 +2,4 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 bases:
   - "github.com/grafana-operator/grafana-operator/deploy/overlays/namespace_scoped?ref=336af550ead917050b3c55622b5c92f80e1a66d1"
-resources:
-  - external-grafana.yaml
-  - datasource.yaml
-  - soak-test.yaml
 namespace: grafana-operator

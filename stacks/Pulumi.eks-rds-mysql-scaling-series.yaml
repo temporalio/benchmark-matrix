@@ -1,0 +1,71 @@
+encryptionsalt: v1:2OehxWopbd0=:v1:YZaAahJaE8EWnmpw:Ygo7ewgyYj0zdFZlzOCsS4s5J5HjfQ==
+config:
+  aws:assumeRole:
+    roleArn: arn:aws:iam::912773994842:role/BenchmarkClusterAdmin
+  aws:defaultTags:
+    tags:
+      Stack: eks-rds-aurora-mysql-medium
+  pulumi:template: kubernetes-go
+  temporal-benchmarks-k8s:AWS:
+    Region: us-west-2
+    AvailabilityZones: ["us-west-2a", "us-west-2b", "us-west-2c"]
+    PrivateSubnetIds: ["subnet-072e150708ec6a826", "subnet-0d8f7e9920a4f4cd0", "subnet-0ae931146b4d89ed9"]
+    PublicSubnetIds: ["subnet-0e09633802916e33f", "subnet-0a414606075f3c508", "subnet-0281dbc974eec544d"]
+    RdsSubnetGroupName: "temporal-benchmark-rds-2e8d5ab"
+    Role: BenchmarkClusterAdmin
+    VpcId: "vpc-0e66ce57785e3e745"
+  temporal-benchmarks-k8s:Benchmark:
+    Workers:
+      CPU:
+        Request: 1
+      Memory:
+        Request: 1Gi
+      Pods: 2
+      WorkflowPollers: 10
+      ActivityPollers: 10
+    SoakTest:
+      ConcurrentWorkflows: 10
+      Pods: 1
+      CPU:
+        Request: 1
+      Memory:
+        Request: 1Gi
+  temporal-benchmarks-k8s:Cluster:
+    EKS:
+      NodeCount: 4
+      TemporalNodeCount: 4
+      NodeType: m5.2xlarge
+  temporal-benchmarks-k8s:Persistence:
+    RDS:
+      Engine: mysql
+      EngineVersion: "5.7.41"
+      InstanceType: db.r5.xlarge
+  temporal-benchmarks-k8s:Temporal:
+    SetCPULimits: true
+    SetGoMaxProcs: false
+    Frontend:
+      Pods: 2
+      CPU:
+        Request: 1
+      Memory:
+        Request: 128Mi
+    History:
+      Pods: 2
+      CPU:
+        Request: 1
+      Memory:
+        Request: 1Gi
+      Shards: 4
+    Matching:
+      Pods: 2
+      CPU:
+        Request: 1
+      Memory:
+        Request: 1Gi
+      TaskQueuePartitions: 4
+    Worker:
+      Pods: 2
+      CPU:
+        Request: 1
+      Memory:
+        Request: 1Gi

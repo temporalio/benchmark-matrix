@@ -3,9 +3,11 @@ import * as aws from "@pulumi/aws";
 import * as eks from "@pulumi/eks";
 import * as k8s from "@pulumi/kubernetes";
 import * as jsyaml from "js-yaml";
+import * as fs from "fs";
+import * as grafanaOperator from "./grafana-operator";
 
 let config = new pulumi.Config();
-const envStack = new pulumi.StackReference(config.require('EnvironmentStackName'), { name: config.require('EnvironmentStackName') });
+const awsConfig = config.requireObject<AWSConfig>('AWS');
 
 const dynamicConfig = (config: TemporalConfig): pulumi.Output<Object> => {
     const dc = config.DynamicConfig || {};
@@ -17,11 +19,27 @@ const dynamicConfig = (config: TemporalConfig): pulumi.Output<Object> => {
     return pulumi.output({ ...dc, ...matchingConfig })
 }
 
+interface AWSConfig {
+    Region: string;
+    VpcId: string;
+    Role: string;
+    RdsSubnetGroupName: string;
+    PublicSubnetIds: string[];
+    PrivateSubnetIds: string[];
+    AvailabilityZones: string[];
+}
+
 interface TemporalConfig {
+    SetCPULimits: boolean;
+    SetGoMaxProcs: boolean;
     DynamicConfig: Object;
     Frontend: FrontendConfig;
     History: HistoryConfig;
     Matching: MatchingConfig;
+    Worker: WorkerConfig;
+}
+
+interface BenchmarkConfig {
     Workers: WorkerConfig;
     SoakTest: SoakTestConfig;
 }
@@ -47,13 +65,11 @@ interface MatchingConfig {
 }
 
 interface CPULimits {
-    request: string;
-    limit: string;
+    Request: string;
 }
 
 interface MemoryLimits {
-    request: string;
-    limit: string;
+    Request: string;
 }
 
 interface WorkerConfig {
@@ -65,6 +81,9 @@ interface WorkerConfig {
 }
 
 interface SoakTestConfig {
+    Pods: number;
+    CPU: CPULimits;
+    Memory: MemoryLimits;
     ConcurrentWorkflows: number;
 }
 
@@ -80,9 +99,12 @@ interface EKSClusterConfig {
     EnvironmentStackName: string;
     NodeType: string;
     NodeCount: number;
+    TemporalNodeCount: number;
+    CloudWatchLogs: boolean;
 }
 
 interface ClusterConfig {
+    HostedMetrics: boolean;
     EKS: EKSClusterConfig | undefined;
 }
 
@@ -101,7 +123,7 @@ interface RDSPersistenceConfig {
     Engine: string;
     EngineVersion: string;
     InstanceType: string;
-    SingleAZ: boolean;
+    Cluster: boolean;
 }
 
 interface CassandraPersistenceConfig {
@@ -132,26 +154,27 @@ function createCluster(clusterConfig: ClusterConfig, persistenceConfig: Persiste
 
 function eksCluster(name: string, config: EKSClusterConfig, persistenceConfig: PersistenceConfig): Cluster {
     const identity = aws.getCallerIdentity({});
-    const role = pulumi.concat('arn:aws:iam::', identity.then(current => current.accountId), ':role/', envStack.getOutput('Role'));
+    const role = pulumi.concat('arn:aws:iam::', identity.then(current => current.accountId), ':role/', awsConfig.Role);
 
     const kubeconfigOptions: eks.KubeconfigOptions = { roleArn: role }
 
     const cluster = new eks.Cluster(name, {
         providerCredentialOpts: kubeconfigOptions,
-        vpcId: envStack.getOutput("VpcId"),
-        publicSubnetIds: envStack.getOutput("PublicSubnetIds"),
-        privateSubnetIds: envStack.getOutput("PrivateSubnetIds"),
+        vpcId: awsConfig.VpcId,
+        publicSubnetIds: awsConfig.PublicSubnetIds,
+        privateSubnetIds: awsConfig.PrivateSubnetIds,
         nodeAssociatePublicIpAddress: false,
-        desiredCapacity: 10,
-        minSize: 10,
-        maxSize: 10,
-    });
-
-    cluster.createNodeGroup(name + '-temporal', {
         instanceType: config.NodeType,
         desiredCapacity: config.NodeCount,
         minSize: config.NodeCount,
         maxSize: config.NodeCount,
+    });
+
+    cluster.createNodeGroup(name + '-temporal', {
+        instanceType: config.NodeType,
+        desiredCapacity: config.TemporalNodeCount,
+        minSize: config.TemporalNodeCount,
+        maxSize: config.TemporalNodeCount,
         labels: {
             dedicated: "temporal",
         },
@@ -224,7 +247,7 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
     }
 
     const rdsSecurityGroup = new aws.ec2.SecurityGroup(name + "-rds", {
-        vpcId: envStack.getOutput("VpcId"),
+        vpcId: awsConfig.VpcId,
     });
     
     new aws.ec2.SecurityGroupRule(name + "-rds", {
@@ -242,8 +265,8 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
         const engine = config.Engine;
 
         const rdsCluster = new aws.rds.Cluster(name, {
-            availabilityZones: envStack.requireOutput('AvailabilityZones'),
-            dbSubnetGroupName: envStack.requireOutput('RdsSubnetGroupName'),
+            availabilityZones: awsConfig.AvailabilityZones,
+            dbSubnetGroupName: awsConfig.RdsSubnetGroupName,
             vpcSecurityGroupIds: [rdsSecurityGroup.id],
             clusterIdentifierPrefix: name,
             engine: engine,
@@ -253,46 +276,26 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
             masterPassword: "temporal",
         });
 
-        rdsCluster.availabilityZones.apply((zones) => {
-            zones.forEach((z, _) => {
-                new aws.rds.ClusterInstance(`${name}-${z}`, {
-                    identifierPrefix: name,
-                    clusterIdentifier: rdsCluster.id,
-                    availabilityZone: z,
-                    engine: engine,
-                    engineVersion: config.EngineVersion,
-                    instanceClass: config.InstanceType,
-                    performanceInsightsEnabled: true,
-                })
+        awsConfig.AvailabilityZones.forEach((zone) => {
+            new aws.rds.ClusterInstance(`${name}-${zone}`, {
+                identifierPrefix: name,
+                clusterIdentifier: rdsCluster.id,
+                availabilityZone: zone,
+                engine: engine,
+                engineVersion: config.EngineVersion,
+                instanceClass: config.InstanceType,
+                performanceInsightsEnabled: true,
             })
         })
 
         endpoint = rdsCluster.endpoint;
-    } else if (config.SingleAZ) {
-        const engine = config.Engine;
-
-        const rdsInstance = new aws.rds.Instance(name, {
-            allocatedStorage: 1024,
-            availabilityZone: envStack.requireOutput('AvailabilityZones').apply(zones => zones[0]),
-            dbSubnetGroupName: envStack.requireOutput('RdsSubnetGroupName'),
-            vpcSecurityGroupIds: [rdsSecurityGroup.id],
-            identifierPrefix: name,
-            engine: engine,
-            engineVersion: config.EngineVersion,
-            instanceClass: config.InstanceType,
-            skipFinalSnapshot: true,
-            username: "temporal",
-            password: "temporal",
-        });
-        
-        endpoint = rdsInstance.address;
-    } else {
+    } else if (config.Cluster) {
         const engine = config.Engine;
 
         const rdsCluster = new aws.rds.Cluster(name, {
             allocatedStorage: 1024,
-            availabilityZones: envStack.requireOutput('AvailabilityZones'),
-            dbSubnetGroupName: envStack.requireOutput('RdsSubnetGroupName'),
+            availabilityZones: awsConfig.AvailabilityZones,
+            dbSubnetGroupName: awsConfig.RdsSubnetGroupName,
             vpcSecurityGroupIds: [rdsSecurityGroup.id],
             clusterIdentifierPrefix: name,
             engine: engine,
@@ -304,6 +307,24 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
         });
         
         endpoint = rdsCluster.endpoint;
+    } else {
+        const engine = config.Engine;
+
+        const rdsInstance = new aws.rds.Instance(name, {
+            allocatedStorage: 1024,
+            availabilityZone: awsConfig.AvailabilityZones[0],
+            dbSubnetGroupName: awsConfig.RdsSubnetGroupName,
+            vpcSecurityGroupIds: [rdsSecurityGroup.id],
+            identifierPrefix: name,
+            engine: engine,
+            engineVersion: config.EngineVersion,
+            instanceClass: config.InstanceType,
+            skipFinalSnapshot: true,
+            username: "temporal",
+            password: "temporal",
+        });
+        
+        endpoint = rdsInstance.address;
     }
 
     return {
@@ -372,7 +393,7 @@ function cassandraPersistence(name: string, config: CassandraPersistenceConfig, 
 
 function opensearchVisibility(name: string, config: OpenSearchConfig, cluster: Cluster): ConfigMapData {
     const opensearchSecurityGroup = new aws.ec2.SecurityGroup(name + "-opensearch", {
-        vpcId: envStack.getOutput("VpcId"),
+        vpcId: awsConfig.VpcId,
     });
     
     new aws.ec2.SecurityGroupRule(name + "-opensearch", {
@@ -384,7 +405,7 @@ function opensearchVisibility(name: string, config: OpenSearchConfig, cluster: C
         toPort: 443,
     });
 
-    const zoneCount = envStack.getOutput("AvailabilityZones").apply(zones => zones.length)
+    const zoneCount = awsConfig.AvailabilityZones.length
     const domain = new aws.opensearch.Domain(name, {
         clusterConfig: {
             instanceType: config.InstanceType,
@@ -395,7 +416,7 @@ function opensearchVisibility(name: string, config: OpenSearchConfig, cluster: C
             }
         },
         vpcOptions: {
-            subnetIds: envStack.getOutput("PrivateSubnetIds"),
+            subnetIds: awsConfig.PrivateSubnetIds,
             securityGroupIds: [opensearchSecurityGroup.id],
         },
         ebsOptions: {
@@ -462,7 +483,7 @@ function opensearchVisibility(name: string, config: OpenSearchConfig, cluster: C
                                 "--log-signing-process",
                                 "--no-verify-ssl",
                                 "--name", "es",
-                                "--region", aws.getRegion({}).then(region => region.name),
+                                "--region", awsConfig.Region,
                                 "--host", domain.endpoint,
                             ],
                             ports: [
@@ -520,122 +541,126 @@ function createAdvancedVisibility(config: VisibilityConfig, cluster: Cluster): C
     return {}
 };
 
-function createMonitoring(cluster: Cluster): Monitoring {
-    const cloudwatchNamespace = new k8s.core.v1.Namespace("amazon-cloudwatch", { metadata: { name: "amazon-cloudwatch" } }, { provider: cluster.provider })
-    const fluentBitConfig = new k8s.core.v1.ConfigMap("fluent-bit-cluster-info",
-        {
-            metadata: {
-                namespace: cloudwatchNamespace.metadata.name,
-                name: "fluent-bit-cluster-info"
-            },
-            data: {
-                "cluster.name": cluster.name,
-                "http.server": "Off",
-                "http.port": "2020",
-                "read.head": "Off",
-                "read.tail": "On",
-                "logs.region": aws.getRegion({}).then(region => region.name),
-            }
-        },
-        { provider: cluster.provider },
-    )
-    
-    cluster.instanceRoles.apply(roles => {
-        roles.forEach((role, i) => {
-            new aws.iam.RolePolicyAttachment(`cloudwatch-role-policy-${i}`, { role: role, policyArn: "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy" })
-        })
-    })
-    
-    new k8s.yaml.ConfigFile("fluent-bit",
-        {
-            file: "https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/fluent-bit/fluent-bit.yaml"
-        },
-        {
-            provider: cluster.provider,
-            dependsOn: [fluentBitConfig],
-        }
-    )
-    
-    const prometheus = new aws.amp.Workspace("prometheus")
+function createMonitoring(config: ClusterConfig, cluster: Cluster): Monitoring {
+    const resourceOptions: pulumi.CustomResourceOptions = {
+        provider: cluster.provider
+    }
 
-    const workspaceRole = new aws.iam.Role(
-        "workspaceRole",
-        {
-            assumeRolePolicy: JSON.stringify({
-                Version: "2012-10-17",
-                Statement: [{
-                    Action: "sts:AssumeRole",
-                    Effect: "Allow",
-                    Sid: "",
-                    Principal: {
-                        Service: "grafana.amazonaws.com",
-                    },
-                }],
+    if (config.EKS?.CloudWatchLogs) {
+        const cloudwatchNamespace = new k8s.core.v1.Namespace("amazon-cloudwatch", { metadata: { name: "amazon-cloudwatch" } }, { provider: cluster.provider })
+        const fluentBitConfig = new k8s.core.v1.ConfigMap("fluent-bit-cluster-info",
+            {
+                metadata: {
+                    namespace: cloudwatchNamespace.metadata.name,
+                    name: "fluent-bit-cluster-info"
+                },
+                data: {
+                    "cluster.name": cluster.name,
+                    "http.server": "Off",
+                    "http.port": "2020",
+                    "read.head": "Off",
+                    "read.tail": "On",
+                    "logs.region": awsConfig.Region,
+                }
+            },
+            resourceOptions,
+        )
+        
+        cluster.instanceRoles.apply(roles => {
+            roles.forEach((role, i) => {
+                new aws.iam.RolePolicyAttachment(`cloudwatch-role-policy-${i}`, { role: role, policyArn: "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy" })
             })
-        }
-    );
-    const grafana = new aws.grafana.Workspace(
-        "grafana",
-        {
-            accountAccessType: "CURRENT_ACCOUNT",
-            authenticationProviders: ["AWS_SSO"],
-            permissionType: "SERVICE_MANAGED",
-            roleArn: workspaceRole.arn,
-        }
-    );
-
-    pulumi.all([aws.getRegion({}), prometheus.prometheusEndpoint]).apply(([region, endpoint]) => {
-        new k8s.kustomize.Directory("monitoring",
-            {
-                directory: "../k8s/monitoring",
-                transformations: [
-                    configureRemoteWrite("k8s", region.name, endpoint),
-                ],
-            },
-            { provider: cluster.provider }
-        );
-    })
-
-    new aws.iam.RolePolicyAttachment("grafana-prometheus-query-role-policy", { role: workspaceRole, policyArn: "arn:aws:iam::aws:policy/AmazonPrometheusQueryAccess" })
-    new aws.iam.RolePolicyAttachment("grafana-cloudwatch-role-policy", { role: workspaceRole, policyArn: "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess" })
-    new aws.iam.RolePolicyAttachment("grafana-tag-role-policy", { role: workspaceRole, policyArn: "arn:aws:iam::aws:policy/ResourceGroupsandTagEditorReadOnlyAccess" })
-
-    cluster.instanceRoles.apply(roles => {
-        roles.forEach((role, i) => {
-            new aws.iam.RolePolicyAttachment(`instance-prometheus-remote-write-role-policy-${i}`, { role: role, policyArn: "arn:aws:iam::aws:policy/AmazonPrometheusRemoteWriteAccess" })
-            new aws.iam.RolePolicyAttachment(`instance-prometheus-query-role-policy-${i}`, { role: role, policyArn: "arn:aws:iam::aws:policy/AmazonPrometheusQueryAccess" })
         })
-    })
 
-    const apiKey = new aws.grafana.WorkspaceApiKey(
-        "external-grafana-editor",
-        {
-            keyName: "external-grafana-editor",
-            keyRole: "ADMIN",
-            secondsToLive: 60 * 60 * 24 * 30,
-            workspaceId: grafana.id,
-        }
-    )
-
-    pulumi.all([aws.getRegion({}), grafana.endpoint, prometheus.prometheusEndpoint]).apply(([region, grafanaEndpoint, prometheusEndpoint]) => {
-        const dashboards = new k8s.kustomize.Directory("dashboards",
+        new k8s.yaml.ConfigFile("fluent-bit",
             {
-                directory: "../k8s/dashboards",
-                transformations: [
-                    configureExternalGrafana("external-grafana", grafanaEndpoint),
-                    configureAWSDatasource("external-prometheus", region.name, prometheusEndpoint),
-                    configureAWSDatasource("cloudwatch", region.name, ""),
-                    (obj: any, opts: pulumi.CustomResourceOptions) => {
-                        if (obj.kind === "Deployment" && obj.metadata.name === "grafana-operator-controller-manager") {
-                            obj.spec.template.spec.containers[0].image = "ghcr.io/grafana-operator/grafana-operator:v5.0.0-rc0"
-                        }
-                    }
-                ]
+                file: "https://raw.githubusercontent.com/aws-samples/amazon-cloudwatch-container-insights/latest/k8s-deployment-manifest-templates/deployment-mode/daemonset/container-insights-monitoring/fluent-bit/fluent-bit.yaml"
             },
-            { provider: cluster.provider }
+            {
+                ...resourceOptions,
+                dependsOn: [fluentBitConfig],
+            },
+        )
+    }
+
+    const monitoringTransformations: ((o: any, opts: pulumi.CustomResourceOptions) => void)[] = [];
+
+    const operator = new k8s.kustomize.Directory(
+        "grafana-operator",
+        {
+            directory: "../k8s/grafana-operator",
+            transformations: [
+                (obj: any, opts: pulumi.CustomResourceOptions) => {
+                    if (obj.kind === "Deployment" && obj.metadata.name === "grafana-operator-controller-manager") {
+                        obj.spec.template.spec.containers[0].image = "ghcr.io/grafana-operator/grafana-operator:v5.0.0-rc0"
+                    }
+                }
+            ]
+        },
+        resourceOptions,
+    );
+
+    let grafanaEndpoint: pulumi.Output<string>;
+    let prometheusEndpoint: pulumi.Output<string>;
+
+    if (config.HostedMetrics) {
+        const prometheus = new aws.amp.Workspace("prometheus")
+        prometheusEndpoint = prometheus.prometheusEndpoint;
+        
+        monitoringTransformations.unshift(configureRemoteWrite("k8s", prometheusEndpoint))
+
+        const workspaceRole = new aws.iam.Role(
+            "workspaceRole",
+            {
+                assumeRolePolicy: JSON.stringify({
+                    Version: "2012-10-17",
+                    Statement: [{
+                        Action: "sts:AssumeRole",
+                        Effect: "Allow",
+                        Sid: "",
+                        Principal: {
+                            Service: "grafana.amazonaws.com",
+                        },
+                    }],
+                })
+            }
         );
 
-        new k8s.core.v1.Secret(
+        const grafana = new aws.grafana.Workspace(
+            "grafana",
+            {
+                accountAccessType: "CURRENT_ACCOUNT",
+                authenticationProviders: ["AWS_SSO"],
+                permissionType: "SERVICE_MANAGED",
+                roleArn: workspaceRole.arn,
+            }
+        );
+        grafanaEndpoint = grafana.endpoint;
+
+        new aws.iam.RolePolicyAttachment("grafana-prometheus-query-role-policy", { role: workspaceRole, policyArn: "arn:aws:iam::aws:policy/AmazonPrometheusQueryAccess" })
+        cluster.instanceRoles.apply(roles => {
+            roles.forEach((role, i) => {
+                new aws.iam.RolePolicyAttachment(`instance-prometheus-remote-write-role-policy-${i}`, { role: role, policyArn: "arn:aws:iam::aws:policy/AmazonPrometheusRemoteWriteAccess" })
+                new aws.iam.RolePolicyAttachment(`instance-prometheus-query-role-policy-${i}`, { role: role, policyArn: "arn:aws:iam::aws:policy/AmazonPrometheusQueryAccess" })
+            })
+        })
+    
+        if (config.EKS?.CloudWatchLogs) {
+            new aws.iam.RolePolicyAttachment("grafana-tag-role-policy", { role: workspaceRole, policyArn: "arn:aws:iam::aws:policy/ResourceGroupsandTagEditorReadOnlyAccess" })
+            new aws.iam.RolePolicyAttachment("grafana-cloudwatch-role-policy", { role: workspaceRole, policyArn: "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess" })    
+        }    
+
+        const apiKey = new aws.grafana.WorkspaceApiKey(
+            "external-grafana-editor",
+            {
+                keyName: "external-grafana-editor",
+                keyRole: "ADMIN",
+                secondsToLive: 60 * 60 * 24 * 30,
+                workspaceId: grafana.id,
+            }
+        )
+
+        const grafanaKey = new k8s.core.v1.Secret(
             "external-grafana-apikey",
             {
                 metadata: {
@@ -646,18 +671,184 @@ function createMonitoring(cluster: Cluster): Monitoring {
                     key: apiKey.key,
                 }
             },
-            { provider: cluster.provider, dependsOn: [dashboards] }
-        )    
+            { ...resourceOptions, dependsOn: [operator] }
+        )
+    
+        new grafanaOperator.grafana.v1beta1.Grafana(
+            "external-grafana",
+            {
+                metadata: {
+                    namespace: "grafana-operator",
+                    name: "grafana",
+                    labels: {
+                        "dashboards": "grafana",
+                    },
+                },
+                spec: {
+                    external: {
+                        url: pulumi.interpolate `https://${grafana.endpoint}`,
+                        apiKey: {
+                            name: grafanaKey.metadata.name,
+                            key: 'key',
+                        },
+                    }
+                }
+            },
+            { ...resourceOptions, dependsOn: [operator] }
+        )
+    
+        new grafanaOperator.grafana.v1beta1.GrafanaDatasource(
+            "external-prometheus",
+            {
+                metadata: {
+                    namespace: "grafana-operator",
+                    name: "prometheus",
+                },
+                spec: {
+                    instanceSelector: {
+                        matchLabels: {
+                            dashboards: "grafana",
+                        }
+                    },
+                    datasource: {
+                        name: "prometheus",
+                        type: "prometheus",
+                        access: "proxy",
+                        url: prometheus.prometheusEndpoint,
+                        isDefault: true,
+                        jsonData: {
+                            sigV4Auth: true,
+                            sigV4AuthType: "ec2_iam_role",
+                            sigV4Region: awsConfig.Region,
+                        }
+                    }
+                }
+            },
+            { ...resourceOptions, dependsOn: [operator] }
+        )
+    } else {
+        grafanaEndpoint = pulumi.output("http://grafana.monitoring.svc.cluster.local:3000")
+
+        const grafanaKey = new k8s.core.v1.Secret(
+            "external-grafana-apikey",
+            {
+                metadata: {
+                    namespace: "grafana-operator",
+                    name: "grafana-apikey",
+                },
+                stringData: {
+                    user: "admin",
+                    password: "admin",
+                }
+            },
+            { ...resourceOptions, dependsOn: [operator] }
+        )
+
+        new grafanaOperator.grafana.v1beta1.Grafana(
+            "grafana",
+            {
+                metadata: {
+                    namespace: "grafana-operator",
+                    name: "grafana",
+                    labels: {
+                        "dashboards": "grafana",
+                    },
+                },
+                spec: {
+                    external: {
+                        url: grafanaEndpoint,
+                        adminUser: {
+                            name: grafanaKey.metadata.name,
+                            key: "user",
+                        },
+                        adminPassword: {
+                            name: grafanaKey.metadata.name,
+                            key: "password",
+                        },
+                    }
+                }
+            },
+            { ...resourceOptions, dependsOn: [operator] }
+        )
+
+        prometheusEndpoint = pulumi.output("prometheus-k8s.monitoring.svc.cluster.local")
+    }
+
+    new k8s.kustomize.Directory(
+        "monitoring",
+        {
+            directory: "../k8s/monitoring",
+            transformations: monitoringTransformations,
+        },
+        resourceOptions,
+    );
+
+    if (config.EKS?.CloudWatchLogs) {
+        new grafanaOperator.grafana.v1beta1.GrafanaDatasource(
+            "cloudwatch",
+            {
+                metadata: {
+                    namespace: "grafana-operator",
+                    name: "cloudwatch",
+                },
+                spec: {
+                    instanceSelector: {
+                        matchLabels: {
+                            dashboards: "grafana",
+                        }
+                    },
+                    datasource: {
+                        name: "cloudwatch",
+                        type: "cloudwatch",
+                        jsonData: {
+                            sigV4Auth: true,
+                            sigV4AuthType: "ec2_iam_role",
+                            sigV4Region: awsConfig.Region,
+                        }
+                    }
+                }
+            },
+            { ...resourceOptions, dependsOn: [operator] }
+        )
+    }
+
+    const dashboards = '../k8s/grafana-operator/dashboards/'
+    fs.readdir(dashboards, (err, files) => {
+        if (err) throw err
+        for (let f of files) {
+            if (!/.json$/.test(f)) { continue }
+
+            new grafanaOperator.grafana.v1beta1.GrafanaDashboard(
+                f,
+                {
+                    metadata: {
+                        namespace: "grafana-operator",
+                        name: f,
+                    },
+                    spec: {
+                        resyncPeriod: "30s",
+                        instanceSelector: {
+                            matchLabels: {
+                                dashboards: "grafana",
+                            },
+                        },        
+                        json: fs.readFileSync(dashboards + f).toString(),
+                    }
+                },
+                { ...resourceOptions, dependsOn: [operator] }
+            )
+        }
     })
 
     return {
-        GrafanaEndpoint: grafana.endpoint,
-        PrometheusEndpoint: prometheus.prometheusEndpoint,
+        GrafanaEndpoint: grafanaEndpoint,
+        PrometheusEndpoint: prometheusEndpoint,
     };
 };
 
 const temporalConfig = config.requireObject<TemporalConfig>('Temporal');
 const clusterConfig = config.requireObject<ClusterConfig>('Cluster')
+const benchmarkConfig = config.requireObject<BenchmarkConfig>('Benchmark');
 const persistenceConfig = config.requireObject<PersistenceConfig>('Persistence');
 
 const cluster = createCluster(clusterConfig, persistenceConfig);
@@ -685,8 +876,8 @@ const workerConfig = new k8s.core.v1.ConfigMap("benchmark-worker-env",
     {
         metadata: { name: "benchmark-worker-env" },
         data: {
-            "TEMPORAL_WORKFLOW_TASK_POLLERS": temporalConfig.Workers.WorkflowPollers.toString(),
-			"TEMPORAL_ACTIVITY_TASK_POLLERS": temporalConfig.Workers.ActivityPollers.toString(),
+            "TEMPORAL_WORKFLOW_TASK_POLLERS": benchmarkConfig.Workers.WorkflowPollers.toString(),
+			"TEMPORAL_ACTIVITY_TASK_POLLERS": benchmarkConfig.Workers.ActivityPollers.toString(),
         }
     },
     { provider: cluster.provider }
@@ -696,7 +887,7 @@ const soakTestConfig = new k8s.core.v1.ConfigMap("benchmark-soaktest-env",
     {
         metadata: { name: "benchmark-soaktest-env" },
         data: {
-            "CONCURRENT_WORKFLOWS": Math.ceil(temporalConfig.SoakTest.ConcurrentWorkflows / temporalConfig.Frontend.Pods).toString(),
+            "CONCURRENT_WORKFLOWS": Math.ceil(benchmarkConfig.SoakTest.ConcurrentWorkflows / benchmarkConfig.SoakTest.Pods).toString(),
         }
     },
     { provider: cluster.provider }
@@ -736,39 +927,16 @@ const temporalAutoSetup = new k8s.batch.v1.Job("temporal-autosetup",
     }
 )
 
-const configureAWSDatasource = (name: string, region: string, endpoint: string) => {
-    return (obj: any, opts: pulumi.CustomResourceOptions) => {
-        if (obj.kind === "GrafanaDatasource" && obj.metadata.name === name) {
-            if (endpoint != "") {
-                obj.spec.datasource.url = endpoint
-            }
-            obj.spec.datasource.jsonData = {
-                sigV4Auth: true,
-                sigV4AuthType: "ec2_iam_role",
-                sigV4Region: region,
-            }
-        }
-    }
-}
-
-const configureExternalGrafana = (name: string, endpoint: string) => {
-    return (obj: any, opts: pulumi.CustomResourceOptions) => {
-        if (obj.kind === "Grafana" && obj.metadata.name === name) {
-            obj.spec.external.url = "https://" + endpoint
-        }
-    }
-}
-
-const configureRemoteWrite = (name: string, region: string, endpoint: string) => {
+const configureRemoteWrite = (name: string, endpoint: pulumi.Input<string>) => {
     return (obj: any, opts: pulumi.CustomResourceOptions) => {
         if (obj.kind === "Prometheus" && obj.metadata.name === name) {
             obj.spec.replicas = 1
             obj.spec.replicaExternalLabelName = ""
             obj.spec.remoteWrite = [
                 {
-                    url: endpoint + 'api/v1/remote_write',
+                    url: pulumi.interpolate `${endpoint}api/v1/remote_write`,
                     sigv4: {
-                        region: region,
+                        region: awsConfig.Region,
                     },
                     queue_config: {
                         max_samples_per_send: 1000,
@@ -800,21 +968,31 @@ const scaleDeployment = (name: string, replicas: number) => {
     }
 }
 
+const deploymentToStatefulset = () => {
+    return (obj: any, opts: pulumi.CustomResourceOptions) => {
+        if (obj.kind === "Deployment") {
+            obj.kind = "StatefulSet"
+        }
+    }
+}
+
 const setLimits = (name: string, cpu: CPULimits, memory: MemoryLimits) => {
     return (obj: any, opts: pulumi.CustomResourceOptions) => {
         if (obj.kind === "Deployment" && obj.metadata.name === name) {
             const container = obj.spec.template.spec.containers[0];
-            if (cpu?.request) {
-                container.resources.requests.cpu = cpu.request
+            if (container.resources === undefined) {
+                container.resources = { requests: {}, limits: {} }
             }
-            if (cpu?.limit) {
-                container.resources.limits.cpu = cpu.limit;
+            if (cpu?.Request) {
+                container.resources.requests.cpu = cpu.Request
+                if (temporalConfig.SetGoMaxProcs && container.name === "temporal") {
+                    container.env.unshift({ name: 'GOMAXPROCS', value: Number(cpu.Request).toFixed() });
+                }
+                container.resources.limits.cpu = temporalConfig.SetCPULimits ? cpu.Request : null;
             }
-            if (memory?.request) {
-                container.resources.requests.memory = memory.request
-            }
-            if (memory?.limit) {
-                container.resources.limits.memory = memory.limit;
+            if (memory?.Request) {
+                container.resources.requests.memory = memory.Request
+                container.resources.limits.memory = memory.Request
             }
         }
     }
@@ -830,7 +1008,7 @@ const tolerateDedicated = (value: string) => {
     }
 }
 
-export const monitoring = createMonitoring(cluster);
+export const monitoring = createMonitoring(clusterConfig, cluster);
 
 new k8s.kustomize.Directory("temporal",
     {
@@ -842,7 +1020,10 @@ new k8s.kustomize.Directory("temporal",
             setLimits("temporal-history", temporalConfig.History.CPU, temporalConfig.History.Memory),
             scaleDeployment("temporal-matching", temporalConfig.Matching.Pods),
             setLimits("temporal-matching", temporalConfig.Matching.CPU, temporalConfig.Matching.Memory),
+            scaleDeployment("temporal-worker", temporalConfig.Worker.Pods),
+            setLimits("temporal-worker", temporalConfig.Worker.CPU, temporalConfig.Worker.Memory),
             tolerateDedicated("temporal"),
+            deploymentToStatefulset(),
         ]
     },
     {
@@ -855,9 +1036,11 @@ new k8s.kustomize.Directory("benchmark",
     {
         directory: "../k8s/benchmark",
         transformations: [
-            scaleDeployment("benchmark-workers", temporalConfig.Workers.Pods),
-            setLimits("benchmark-workers", temporalConfig.Workers.CPU, temporalConfig.Workers.Memory),
-            scaleDeployment("benchmark-soak-test", temporalConfig.Frontend.Pods),
+            scaleDeployment("benchmark-workers", benchmarkConfig.Workers.Pods),
+            setLimits("benchmark-workers", benchmarkConfig.Workers.CPU, benchmarkConfig.Workers.Memory),
+            scaleDeployment("benchmark-soak-test", benchmarkConfig.SoakTest.Pods),
+            setLimits("benchmark-soak-test", benchmarkConfig.SoakTest.CPU, benchmarkConfig.SoakTest.Memory),
+            deploymentToStatefulset(),
         ]
     },
     {

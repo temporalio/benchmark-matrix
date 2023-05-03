@@ -24,31 +24,14 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 33,
+  "id": 34,
   "links": [],
   "liveNow": false,
   "panels": [
     {
-      "collapsed": false,
-      "datasource": {
-        "type": "datasource",
-        "uid": "grafana"
-      },
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 10,
-      "panels": [],
-      "title": "Service",
-      "type": "row"
-    },
-    {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "P1809F7CD0C75ACF3"
       },
       "fieldConfig": {
         "defaults": {
@@ -56,6 +39,8 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
@@ -73,7 +58,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
+            "showPoints": "never",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -97,7 +82,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "percentunit"
         },
         "overrides": []
       },
@@ -105,14 +90,15 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 1
+        "y": 0
       },
-      "id": 14,
+      "id": 28,
       "options": {
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
           "mode": "single",
@@ -123,22 +109,22 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "P1809F7CD0C75ACF3"
           },
-          "exemplar": true,
-          "expr": "sum by (pod) (rate(service_requests{service_name=\"frontend\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "{{pod}}",
+          "editorMode": "code",
+          "expr": "sum by (task_type) (rate(poll_success_sync[$__rate_interval])) / sum by (task_type) (rate(poll_success[$__rate_interval]))",
+          "legendFormat": "__auto",
+          "range": true,
           "refId": "A"
         }
       ],
-      "title": "Worker RPS",
+      "title": "Poll Sync Rate",
       "type": "timeseries"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "P1809F7CD0C75ACF3"
       },
       "fieldConfig": {
         "defaults": {
@@ -146,6 +132,8 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
@@ -163,7 +151,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
+            "showPoints": "never",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -187,7 +175,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -195,14 +183,15 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 1
+        "y": 0
       },
-      "id": 15,
+      "id": 30,
       "options": {
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
           "mode": "single",
@@ -215,26 +204,28 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
+          "editorMode": "code",
           "exemplar": true,
-          "expr": "sum by (error_type) (rate(service_error_with_type{service_name=\"frontend\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(temporal_workflow_task_schedule_to_start_latency_bucket{namespace=\"default\"}[$__rate_interval])))",
           "interval": "",
-          "legendFormat": "{{error_type}}",
+          "legendFormat": "Workflow",
+          "range": true,
           "refId": "A"
         },
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "P1809F7CD0C75ACF3"
           },
-          "exemplar": true,
-          "expr": "",
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(temporal_activity_schedule_to_start_latency_bucket{namespace=\"default\"}[$__rate_interval])))",
           "hide": false,
-          "interval": "",
-          "legendFormat": "",
+          "legendFormat": "Activity",
+          "range": true,
           "refId": "B"
         }
       ],
-      "title": "Worker Errors",
+      "title": "Schedule to Start Latency p95",
       "type": "timeseries"
     },
     {
@@ -243,11 +234,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 9
+        "y": 8
       },
       "id": 17,
       "panels": [],
-      "title": "Pods",
+      "title": "Worker Pods",
       "type": "row"
     },
     {
@@ -261,6 +252,8 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
@@ -278,7 +271,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
+            "showPoints": "never",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -304,20 +297,41 @@
           },
           "unit": "percentunit"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 50
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 10
+        "y": 9
       },
-      "id": 12,
+      "id": 24,
       "options": {
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
           "mode": "single",
@@ -330,20 +344,34 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
+          "editorMode": "code",
           "exemplar": true,
-          "expr": "sum(\n    node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"temporal\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-worker\", workload_type=\"statefulset\"}\n) by (pod)\n/sum(\n    kube_pod_container_resource_requests{job=\"kube-state-metrics\",namespace=\"temporal\",resource=\"cpu\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-worker\", workload_type=\"statefulset\"}\n) by (pod)\n",
+          "expr": "sum(\n    node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"default\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"default\", workload=\"benchmark-workers\", workload_type=\"statefulset\"}\n) by (pod)\n/sum(\n    kube_pod_container_resource_requests{job=\"kube-state-metrics\",namespace=\"default\",resource=\"cpu\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"default\", workload=\"benchmark-workers\", workload_type=\"statefulset\"}\n) by (pod)\n",
           "interval": "",
-          "legendFormat": "{{pod}}",
+          "legendFormat": "__auto",
+          "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "sum(\n    increase(container_cpu_cfs_throttled_periods_total{job=\"kubelet\", metrics_path=\"/metrics/cadvisor\", container!=\"\"}[$__rate_interval])\n    * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"default\", workload=\"benchmark-workers\", workload_type=\"statefulset\"}\n)\n/\nsum(\n    increase(container_cpu_cfs_periods_total{job=\"kubelet\", metrics_path=\"/metrics/cadvisor\", container!=\"\"}[$__rate_interval])\n    * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"default\", workload=\"benchmark-workers\", workload_type=\"statefulset\"}\n) > 0\n",
+          "hide": false,
+          "legendFormat": "throttle",
+          "range": true,
+          "refId": "B"
         }
       ],
-      "title": "Worker CPU%",
+      "title": "Benchmark Workers CPU Request % Used",
       "type": "timeseries"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "P1809F7CD0C75ACF3"
       },
       "fieldConfig": {
         "defaults": {
@@ -351,6 +379,8 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
@@ -368,7 +398,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
+            "showPoints": "never",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -400,14 +430,15 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 10
+        "y": 9
       },
-      "id": 13,
+      "id": 26,
       "options": {
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
           "mode": "single",
@@ -420,35 +451,37 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
+          "editorMode": "code",
           "exemplar": true,
-          "expr": "sum(\n    container_memory_working_set_bytes{namespace=\"temporal\", container!=\"\", image!=\"\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-worker\", workload_type=\"statefulset\"}\n) by (pod)\n/sum(\n    kube_pod_container_resource_requests{job=\"kube-state-metrics\",namespace=\"temporal\", resource=\"memory\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-worker\", workload_type=\"statefulset\"}\n) by (pod)\n",
+          "expr": "sum(\n    container_memory_working_set_bytes{namespace=\"default\", container!=\"\", image!=\"\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"default\", workload=\"benchmark-workers\", workload_type=\"statefulset\"}\n) by (pod)\n/sum(\n    kube_pod_container_resource_requests{job=\"kube-state-metrics\",namespace=\"default\", resource=\"memory\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"default\", workload=\"benchmark-workers\", workload_type=\"statefulset\"}\n) by (pod)\n",
           "interval": "",
           "legendFormat": "{{pod}}",
+          "range": true,
           "refId": "A"
         }
       ],
-      "title": "Worker Memory%",
+      "title": "Benchmark Workers Memory Request % Used",
       "type": "timeseries"
     }
   ],
   "refresh": "30s",
-  "schemaVersion": 36,
+  "schemaVersion": 37,
   "style": "dark",
   "tags": [
-    "worker",
-    "temporal"
+    "temporal",
+    "polling"
   ],
   "templating": {
     "list": []
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "browser",
-  "title": "Soak Test - Worker",
-  "uid": "af4475f3-4457-42b5-9586-d396aa45319c",
-  "version": 2,
+  "timezone": "",
+  "title": "Soak Test - Polling",
+  "uid": "trsgBasVk",
+  "version": 7,
   "weekStart": ""
 }

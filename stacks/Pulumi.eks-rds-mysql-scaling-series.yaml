@@ -32,8 +32,8 @@ config:
         Request: 1Gi
   temporal-benchmarks-k8s:Cluster:
     EKS:
-      NodeCount: 4
-      TemporalNodeCount: 4
+      NodeCount: 3
+      TemporalNodeCount: 3
       NodeType: m5.2xlarge
   temporal-benchmarks-k8s:Persistence:
     RDS:
@@ -41,21 +41,21 @@ config:
       EngineVersion: "5.7.41"
       InstanceType: db.r5.xlarge
   temporal-benchmarks-k8s:Temporal:
-    SetCPULimits: true
-    SetGoMaxProcs: false
+    SetCPULimits: false
+    SetGoMaxProcs: true
     Frontend:
       Pods: 2
       CPU:
         Request: 1
       Memory:
-        Request: 128Mi
+        Request: 1Gi
     History:
       Pods: 2
       CPU:
-        Request: 1
+        Request: 2
       Memory:
-        Request: 1Gi
-      Shards: 4
+        Request: 8Gi
+      Shards: 512
     Matching:
       Pods: 2
       CPU:

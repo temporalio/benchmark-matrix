@@ -17,6 +17,14 @@ spec:
         app.kubernetes.io/name: benchmark
         app.kubernetes.io/component: soak-test
     spec:
+      initContainers:
+        - name: create-namespace
+          image: temporalio/admin-tools:1.20.0
+          env:
+          - name: TEMPORAL_CLI_ADDRESS
+            value: "temporal-frontend.temporal.svc.cluster.local:7233"
+          command: ["bash", "-c"]
+          args: ["tctl --namespace default namespace register || tctl --namespace default namespace describe"]
       containers:
       - image: ghcr.io/temporalio/benchmark-workers:main
         imagePullPolicy: Always

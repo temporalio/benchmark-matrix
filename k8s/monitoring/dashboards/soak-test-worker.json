@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": null,
+  "id": 31,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -126,13 +126,13 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "sum by (pod) (rate(service_requests{service_name=\"history\"}[$__rate_interval]))",
+          "expr": "sum by (pod) (rate(service_requests{service_name=\"frontend\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{pod}}",
           "refId": "A"
         }
       ],
-      "title": "History RPS",
+      "title": "Worker RPS",
       "type": "timeseries"
     },
     {
@@ -216,7 +216,7 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "sum by (error_type) (rate(service_error_with_type{service_name=\"history\"}[$__rate_interval]))",
+          "expr": "sum by (error_type) (rate(service_error_with_type{service_name=\"frontend\"}[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{error_type}}",
           "refId": "A"
@@ -234,7 +234,7 @@
           "refId": "B"
         }
       ],
-      "title": "History Errors",
+      "title": "Worker Errors",
       "type": "timeseries"
     },
     {
@@ -253,7 +253,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "P1809F7CD0C75ACF3"
       },
       "fieldConfig": {
         "defaults": {
@@ -331,13 +331,13 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "sum(\n    node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"temporal\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-history\", workload_type=\"statefulset\"}\n) by (pod)\n/sum(\n    kube_pod_container_resource_limits{job=\"kube-state-metrics\",namespace=\"temporal\",resource=\"cpu\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-history\", workload_type=\"statefulset\"}\n) by (pod)\n",
+          "expr": "sum(\n    node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"temporal\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-worker\", workload_type=\"statefulset\"}\n) by (pod)\n/sum(\n    kube_pod_container_resource_requests{job=\"kube-state-metrics\",namespace=\"temporal\",resource=\"cpu\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-worker\", workload_type=\"statefulset\"}\n) by (pod)\n",
           "interval": "",
           "legendFormat": "{{pod}}",
           "refId": "A"
         }
       ],
-      "title": "History CPU%",
+      "title": "Worker CPU%",
       "type": "timeseries"
     },
     {
@@ -421,31 +421,34 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "sum(\n    container_memory_working_set_bytes{namespace=\"temporal\", container!=\"\", image!=\"\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-history\", workload_type=\"statefulset\"}\n) by (pod)\n/sum(\n    kube_pod_container_resource_limits{job=\"kube-state-metrics\",namespace=\"temporal\", resource=\"memory\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-history\", workload_type=\"statefulset\"}\n) by (pod)\n",
+          "expr": "sum(\n    container_memory_working_set_bytes{namespace=\"temporal\", container!=\"\", image!=\"\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-worker\", workload_type=\"statefulset\"}\n) by (pod)\n/sum(\n    kube_pod_container_resource_requests{job=\"kube-state-metrics\",namespace=\"temporal\", resource=\"memory\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-worker\", workload_type=\"statefulset\"}\n) by (pod)\n",
           "interval": "",
           "legendFormat": "{{pod}}",
           "refId": "A"
         }
       ],
-      "title": "History Memory%",
+      "title": "Worker Memory%",
       "type": "timeseries"
     }
   ],
   "refresh": "30s",
   "schemaVersion": 36,
   "style": "dark",
-  "tags": [],
+  "tags": [
+    "worker",
+    "temporal"
+  ],
   "templating": {
     "list": []
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Soak Test - History",
-  "uid": "W__p11E4z",
-  "version": 1,
+  "title": "Soak Test - Worker",
+  "uid": "af4475f3-4457-42b5-9586-d396aa45319c",
+  "version": 2,
   "weekStart": ""
 }

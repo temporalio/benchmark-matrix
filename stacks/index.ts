@@ -3,8 +3,6 @@ import * as aws from "@pulumi/aws";
 import * as eks from "@pulumi/eks";
 import * as k8s from "@pulumi/kubernetes";
 import * as jsyaml from "js-yaml";
-import * as fs from "fs";
-import * as grafanaOperator from "./grafana-operator";
 
 let config = new pulumi.Config();
 const awsConfig = config.requireObject<AWSConfig>('AWS');
@@ -585,21 +583,6 @@ function createMonitoring(config: ClusterConfig, cluster: Cluster): Monitoring {
 
     const monitoringTransformations: ((o: any, opts: pulumi.CustomResourceOptions) => void)[] = [];
 
-    const operator = new k8s.kustomize.Directory(
-        "grafana-operator",
-        {
-            directory: "../k8s/grafana-operator",
-            transformations: [
-                (obj: any, opts: pulumi.CustomResourceOptions) => {
-                    if (obj.kind === "Deployment" && obj.metadata.name === "grafana-operator-controller-manager") {
-                        obj.spec.template.spec.containers[0].image = "ghcr.io/grafana-operator/grafana-operator:v5.0.0-rc0"
-                    }
-                }
-            ]
-        },
-        resourceOptions,
-    );
-
     let grafanaEndpoint: pulumi.Output<string>;
     let prometheusEndpoint: pulumi.Output<string>;
 
@@ -659,118 +642,8 @@ function createMonitoring(config: ClusterConfig, cluster: Cluster): Monitoring {
                 workspaceId: grafana.id,
             }
         )
-
-        const grafanaKey = new k8s.core.v1.Secret(
-            "external-grafana-apikey",
-            {
-                metadata: {
-                    namespace: "grafana-operator",
-                    name: "external-grafana-apikey",
-                },
-                stringData: {
-                    key: apiKey.key,
-                }
-            },
-            { ...resourceOptions, dependsOn: [operator] }
-        )
-    
-        new grafanaOperator.grafana.v1beta1.Grafana(
-            "external-grafana",
-            {
-                metadata: {
-                    namespace: "grafana-operator",
-                    name: "grafana",
-                    labels: {
-                        "dashboards": "grafana",
-                    },
-                },
-                spec: {
-                    external: {
-                        url: pulumi.interpolate `https://${grafana.endpoint}`,
-                        apiKey: {
-                            name: grafanaKey.metadata.name,
-                            key: 'key',
-                        },
-                    }
-                }
-            },
-            { ...resourceOptions, dependsOn: [operator] }
-        )
-    
-        new grafanaOperator.grafana.v1beta1.GrafanaDatasource(
-            "external-prometheus",
-            {
-                metadata: {
-                    namespace: "grafana-operator",
-                    name: "prometheus",
-                },
-                spec: {
-                    instanceSelector: {
-                        matchLabels: {
-                            dashboards: "grafana",
-                        }
-                    },
-                    datasource: {
-                        name: "prometheus",
-                        type: "prometheus",
-                        access: "proxy",
-                        url: prometheus.prometheusEndpoint,
-                        isDefault: true,
-                        jsonData: {
-                            sigV4Auth: true,
-                            sigV4AuthType: "ec2_iam_role",
-                            sigV4Region: awsConfig.Region,
-                        }
-                    }
-                }
-            },
-            { ...resourceOptions, dependsOn: [operator] }
-        )
     } else {
         grafanaEndpoint = pulumi.output("http://grafana.monitoring.svc.cluster.local:3000")
-
-        const grafanaKey = new k8s.core.v1.Secret(
-            "external-grafana-apikey",
-            {
-                metadata: {
-                    namespace: "grafana-operator",
-                    name: "grafana-apikey",
-                },
-                stringData: {
-                    user: "admin",
-                    password: "admin",
-                }
-            },
-            { ...resourceOptions, dependsOn: [operator] }
-        )
-
-        new grafanaOperator.grafana.v1beta1.Grafana(
-            "grafana",
-            {
-                metadata: {
-                    namespace: "grafana-operator",
-                    name: "grafana",
-                    labels: {
-                        "dashboards": "grafana",
-                    },
-                },
-                spec: {
-                    external: {
-                        url: grafanaEndpoint,
-                        adminUser: {
-                            name: grafanaKey.metadata.name,
-                            key: "user",
-                        },
-                        adminPassword: {
-                            name: grafanaKey.metadata.name,
-                            key: "password",
-                        },
-                    }
-                }
-            },
-            { ...resourceOptions, dependsOn: [operator] }
-        )
-
         prometheusEndpoint = pulumi.output("prometheus-k8s.monitoring.svc.cluster.local")
     }
 
@@ -782,63 +655,6 @@ function createMonitoring(config: ClusterConfig, cluster: Cluster): Monitoring {
         },
         resourceOptions,
     );
-
-    if (config.EKS?.CloudWatchLogs) {
-        new grafanaOperator.grafana.v1beta1.GrafanaDatasource(
-            "cloudwatch",
-            {
-                metadata: {
-                    namespace: "grafana-operator",
-                    name: "cloudwatch",
-                },
-                spec: {
-                    instanceSelector: {
-                        matchLabels: {
-                            dashboards: "grafana",
-                        }
-                    },
-                    datasource: {
-                        name: "cloudwatch",
-                        type: "cloudwatch",
-                        jsonData: {
-                            sigV4Auth: true,
-                            sigV4AuthType: "ec2_iam_role",
-                            sigV4Region: awsConfig.Region,
-                        }
-                    }
-                }
-            },
-            { ...resourceOptions, dependsOn: [operator] }
-        )
-    }
-
-    const dashboards = '../k8s/grafana-operator/dashboards/'
-    fs.readdir(dashboards, (err, files) => {
-        if (err) throw err
-        for (let f of files) {
-            if (!/.json$/.test(f)) { continue }
-
-            new grafanaOperator.grafana.v1beta1.GrafanaDashboard(
-                f,
-                {
-                    metadata: {
-                        namespace: "grafana-operator",
-                        name: f,
-                    },
-                    spec: {
-                        resyncPeriod: "30s",
-                        instanceSelector: {
-                            matchLabels: {
-                                dashboards: "grafana",
-                            },
-                        },        
-                        json: fs.readFileSync(dashboards + f).toString(),
-                    }
-                },
-                { ...resourceOptions, dependsOn: [operator] }
-            )
-        }
-    })
 
     return {
         GrafanaEndpoint: grafanaEndpoint,

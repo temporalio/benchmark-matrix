@@ -1,0 +1,16 @@
+{
+    "apiVersion": 1,
+    "providers": [
+        {
+            "folder": "Temporal",
+            "folderUid": "",
+            "name": "temporal",
+            "options": {
+                "path": "/grafana-dashboard-definitions/temporal"
+            },
+            "orgId": 1,
+            "type": "file",
+            "allowUiUpdates": true
+        }
+    ]
+}

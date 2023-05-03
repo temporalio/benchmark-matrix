@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": null,
+  "id": 29,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -42,13 +42,13 @@
       },
       "id": 6,
       "panels": [],
-      "title": "Throughput",
+      "title": "Service",
       "type": "row"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "P1809F7CD0C75ACF3"
       },
       "fieldConfig": {
         "defaults": {
@@ -56,6 +56,8 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
@@ -111,8 +113,9 @@
       "options": {
         "legend": {
           "calcs": [],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "single",
@@ -125,37 +128,22 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
+          "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(state_transition_count_count{exported_namespace=\"default\"}[$__rate_interval]))",
+          "expr": "sum by (operation) (rate(persistence_requests[$__rate_interval]))",
           "interval": "",
-          "legendFormat": "",
+          "legendFormat": "{{operation}}",
+          "range": true,
           "refId": "A"
         }
       ],
-      "title": "State Transitions Per Second",
+      "title": "Requests",
       "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "datasource": {
-        "type": "datasource",
-        "uid": "grafana"
-      },
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 9
-      },
-      "id": 2,
-      "panels": [],
-      "title": "SLO",
-      "type": "row"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "P1809F7CD0C75ACF3"
       },
       "fieldConfig": {
         "defaults": {
@@ -163,6 +151,8 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
@@ -211,15 +201,16 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 10
+        "x": 12,
+        "y": 1
       },
       "id": 4,
       "options": {
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "single",
@@ -233,7 +224,7 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(temporal_request_latency_attempt_bucket{job=\"benchmark-monitoring\",operation=\"StartWorkflowExecution\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(persistence_latency_bucket[$__rate_interval])))",
           "interval": "",
           "legendFormat": "{{operation}}",
           "refId": "A"
@@ -245,7 +236,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "P1809F7CD0C75ACF3"
       },
       "fieldConfig": {
         "defaults": {
@@ -253,6 +244,8 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
@@ -301,15 +294,16 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 10
+        "x": 0,
+        "y": 9
       },
       "id": 16,
       "options": {
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
           "mode": "single",
@@ -323,7 +317,7 @@
             "uid": "prometheus"
           },
           "exemplar": true,
-          "expr": "sum by (operation) (rate(temporal_request_failure{job=\"benchmark-monitoring\",operation=\"StartWorkflowExecution\"}[$__rate_interval]))",
+          "expr": "sum by (error_type) (rate(persistence_error_with_type[$__rate_interval]))",
           "interval": "",
           "legendFormat": "{{operation}}",
           "refId": "A"
@@ -334,9 +328,12 @@
     }
   ],
   "refresh": "30s",
-  "schemaVersion": 36,
+  "schemaVersion": 37,
   "style": "dark",
-  "tags": [],
+  "tags": [
+    "persistence",
+    "temporal"
+  ],
   "templating": {
     "list": []
   },
@@ -346,8 +343,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Soak Test - SLO",
-  "uid": "eaa2283b-5143-4454-a7d4-97a4044da8e7",
-  "version": 1,
+  "title": "Soak Test - Persistence",
+  "uid": "d2bab180-bba7-4cdd-a946-75543f8c512e",
+  "version": 2,
   "weekStart": ""
 }

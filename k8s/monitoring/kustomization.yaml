@@ -1,5 +1,5 @@
 bases:
-- "github.com/prometheus-operator/kube-prometheus?ref=v0.11.0"
+- "github.com/prometheus-operator/kube-prometheus?ref=v0.12.0"
 secretGenerator:
 - name: grafana-config
   namespace: monitoring
@@ -8,5 +8,27 @@ secretGenerator:
       disableNameSuffixHash: true
   files:
   - grafana.ini
+configMapGenerator:
+- name: grafana-dashboards
+  namespace: monitoring
+  behavior: merge
+  options:
+      disableNameSuffixHash: true
+  files:
+  - dashboards/folder.yaml
+- name: grafana-temporal-dashboard-definitions
+  namespace: monitoring
+  options:
+      disableNameSuffixHash: true
+  files:
+  - dashboards/soak-test-frontend.json
+  - dashboards/soak-test-history.json
+  - dashboards/soak-test-matching.json
+  - dashboards/soak-test-persistence.json
+  - dashboards/soak-test-slo.json
+  - dashboards/soak-test-worker.json
 resources:
 - prometheus-rbacTemporal.yaml
+- temporal-rules.yaml
+patchesStrategicMerge:
+- ./dashboards/patch.yaml

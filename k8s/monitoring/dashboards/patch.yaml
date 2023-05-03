@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  template:
+    spec:
+      containers:
+        - name: grafana
+          volumeMounts:
+            - mountPath: /grafana-dashboard-definitions/temporal
+              name: grafana-temporal-dashboard-definitions
+      volumes:
+        - name: grafana-temporal-dashboard-definitions
+          configMap:
+            defaultMode: 420
+            name: grafana-temporal-dashboard-definitions

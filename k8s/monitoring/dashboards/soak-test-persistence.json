@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 31,
+  "id": 34,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -75,7 +75,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
+            "showPoints": "never",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -115,7 +115,7 @@
           "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": false
+          "showLegend": true
         },
         "tooltip": {
           "mode": "single",
@@ -130,14 +130,14 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (operation) (rate(persistence_requests[$__rate_interval]))",
+          "expr": "sum by (operation) (rate(persistence_requests[$__rate_interval])) > 0",
           "interval": "",
           "legendFormat": "{{operation}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Requests",
+      "title": "RPS",
       "type": "timeseries"
     },
     {
@@ -170,7 +170,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
+            "showPoints": "never",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -210,7 +210,7 @@
           "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
-          "showLegend": false
+          "showLegend": true
         },
         "tooltip": {
           "mode": "single",
@@ -223,10 +223,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
+          "editorMode": "code",
           "exemplar": true,
-          "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(persistence_latency_bucket[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(persistence_latency_bucket[$__rate_interval]))) > 0",
           "interval": "",
           "legendFormat": "{{operation}}",
+          "range": true,
           "refId": "A"
         }
       ],
@@ -263,7 +265,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
+            "showPoints": "never",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -316,14 +318,120 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
+          "editorMode": "code",
           "exemplar": true,
-          "expr": "sum by (error_type) (rate(persistence_error_with_type[$__rate_interval]))",
+          "expr": "sum by (error_type) (rate(persistence_error_with_type[$__rate_interval])) > 0",
           "interval": "",
           "legendFormat": "{{operation}}",
+          "range": true,
           "refId": "A"
         }
       ],
       "title": "Request Errors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "P561CB7FAE9DC47C2"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "id": 18,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "P561CB7FAE9DC47C2"
+          },
+          "dimensions": {
+            "DBInstanceIdentifier": "$dbidentifier"
+          },
+          "expression": "",
+          "id": "",
+          "label": "",
+          "matchExact": true,
+          "metricEditorMode": 0,
+          "metricName": "CPUUtilization",
+          "metricQueryType": 0,
+          "namespace": "AWS/RDS",
+          "period": "",
+          "queryMode": "Metrics",
+          "refId": "A",
+          "region": "default",
+          "sqlExpression": "",
+          "statistic": "Average"
+        }
+      ],
+      "title": "RDS CPU",
       "type": "timeseries"
     }
   ],
@@ -335,7 +443,15 @@
     "temporal"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "hide": 2,
+        "name": "dbidentifier",
+        "query": "eks-rds-mysql-scaling-series20230504100109469600000005",
+        "skipUrlSync": false,
+        "type": "constant"
+      }
+    ]
   },
   "time": {
     "from": "now-15m",
@@ -345,6 +461,6 @@
   "timezone": "",
   "title": "Soak Test - Persistence",
   "uid": "d2bab180-bba7-4cdd-a946-75543f8c512e",
-  "version": 2,
+  "version": 5,
   "weekStart": ""
 }

@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+stringData:
+  cloudwatch.yaml: |-
+    {
+        "apiVersion": 1,
+        "datasources": [
+            {
+                "access": "proxy",
+                "editable": false,
+                "name": "cloudwatch",
+                "orgId": 1,
+                "type": "cloudwatch",
+                "jsonData": {
+                    "authType": "default",
+                    "defaultRegion": "us-west-2",
+                },
+                "version": 1
+            }
+        ]
+    }
+type: Opaque

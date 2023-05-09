@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 30,
+  "id": 33,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -513,7 +513,7 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
+            "showPoints": "never",
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -607,6 +607,6 @@
   "timezone": "",
   "title": "Soak Test - Matching",
   "uid": "d9bfbe59-a99f-4c89-951e-4ec0167ecfb0",
-  "version": 3,
+  "version": 4,
   "weekStart": ""
 }

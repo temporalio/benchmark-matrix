@@ -25,10 +25,14 @@ configMapGenerator:
   - dashboards/soak-test-history.json
   - dashboards/soak-test-matching.json
   - dashboards/soak-test-persistence.json
+  - dashboards/soak-test-pods.json
+  - dashboards/soak-test-polling.json
+  - dashboards/soak-test-services.json
   - dashboards/soak-test-slo.json
   - dashboards/soak-test-worker.json
 resources:
 - prometheus-rbacTemporal.yaml
 - temporal-rules.yaml
 patchesStrategicMerge:
+- ./dashboards/cloudwatch.yaml
 - ./dashboards/patch.yaml

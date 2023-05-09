@@ -647,6 +647,13 @@ function createMonitoring(config: ClusterConfig, cluster: Cluster): Monitoring {
         prometheusEndpoint = pulumi.output("prometheus-k8s.monitoring.svc.cluster.local")
     }
 
+    cluster.instanceRoles.apply(roles => {
+        roles.forEach((role, i) => {
+            new aws.iam.RolePolicyAttachment("instance-tag-role-policy", { role, policyArn: "arn:aws:iam::aws:policy/ResourceGroupsandTagEditorReadOnlyAccess" })
+            new aws.iam.RolePolicyAttachment("instance-cloudwatch-role-policy", { role, policyArn: "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess" })    
+        })
+    })
+
     new k8s.kustomize.Directory(
         "monitoring",
         {
@@ -784,11 +791,9 @@ const scaleDeployment = (name: string, replicas: number) => {
     }
 }
 
-const deploymentToStatefulset = () => {
-    return (obj: any, opts: pulumi.CustomResourceOptions) => {
-        if (obj.kind === "Deployment") {
-            obj.kind = "StatefulSet"
-        }
+const deploymentToStatefulset = (obj: any, opts: pulumi.CustomResourceOptions) => {
+    if (obj.kind === "Deployment") {
+        obj.kind = "StatefulSet"
     }
 }
 
@@ -839,7 +844,7 @@ new k8s.kustomize.Directory("temporal",
             scaleDeployment("temporal-worker", temporalConfig.Worker.Pods),
             setLimits("temporal-worker", temporalConfig.Worker.CPU, temporalConfig.Worker.Memory),
             tolerateDedicated("temporal"),
-            deploymentToStatefulset(),
+            deploymentToStatefulset,
         ]
     },
     {
@@ -856,7 +861,7 @@ new k8s.kustomize.Directory("benchmark",
             setLimits("benchmark-workers", benchmarkConfig.Workers.CPU, benchmarkConfig.Workers.Memory),
             scaleDeployment("benchmark-soak-test", benchmarkConfig.SoakTest.Pods),
             setLimits("benchmark-soak-test", benchmarkConfig.SoakTest.CPU, benchmarkConfig.SoakTest.Memory),
-            deploymentToStatefulset(),
+            deploymentToStatefulset,
         ]
     },
     {

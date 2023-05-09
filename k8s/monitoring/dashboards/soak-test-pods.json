@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 34,
+  "id": 35,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -672,6 +672,6 @@
   "timezone": "",
   "title": "Soak Test - Pods",
   "uid": "JjZ8XAsVk",
-  "version": 9,
+  "version": 4,
   "weekStart": ""
 }

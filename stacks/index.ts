@@ -809,7 +809,7 @@ const setLimits = (name: string, cpu: CPULimits, memory: MemoryLimits) => {
                 if (temporalConfig.SetGoMaxProcs && container.name === "temporal") {
                     container.env.unshift({ name: 'GOMAXPROCS', value: Number(cpu.Request).toFixed() });
                 }
-                container.resources.limits.cpu = temporalConfig.SetCPULimits ? cpu.Request : null;
+                container.resources.limits.cpu = temporalConfig.SetCPULimits ? (Number(cpu.Request) * 2).toFixed() : null;
             }
             if (memory?.Request) {
                 container.resources.requests.memory = memory.Request
@@ -844,7 +844,7 @@ new k8s.kustomize.Directory("temporal",
             scaleDeployment("temporal-worker", temporalConfig.Worker.Pods),
             setLimits("temporal-worker", temporalConfig.Worker.CPU, temporalConfig.Worker.Memory),
             tolerateDedicated("temporal"),
-            deploymentToStatefulset,
+            // deploymentToStatefulset,
         ]
     },
     {

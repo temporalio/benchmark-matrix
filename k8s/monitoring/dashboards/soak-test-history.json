@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 32,
+  "id": 33,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -353,7 +353,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum(\n    node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"temporal\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-history\", workload_type=\"statefulset\"}\n) by (pod)\n/sum(\n    kube_pod_container_resource_requests{job=\"kube-state-metrics\",namespace=\"temporal\",resource=\"cpu\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-history\", workload_type=\"statefulset\"}\n) by (pod)\n",
+          "expr": "sum(\n  rate(container_cpu_usage_seconds_total{container=\"temporal\"}[$__rate_interval])\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-history\"}\n) by (pod)\n/sum(\n    kube_pod_container_resource_requests{job=\"kube-state-metrics\",namespace=\"temporal\",resource=\"cpu\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-history\"}\n) by (pod)\n",
           "interval": "",
           "legendFormat": "__auto",
           "range": true,
@@ -522,7 +522,6 @@
             }
           },
           "mappings": [],
-          "max": 0.05,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -581,6 +580,107 @@
         }
       ],
       "title": "Lock Latency p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P1809F7CD0C75ACF3"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 19
+      },
+      "id": 32,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(task_latency_processing_bucket[$__rate_interval])))",
+          "legendFormat": "p50",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(task_latency_processing_bucket[$__rate_interval])))",
+          "hide": false,
+          "legendFormat": "p95",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Task Latency",
       "type": "timeseries"
     },
     {
@@ -656,7 +756,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 20
+            "y": 28
           },
           "id": 19,
           "options": {
@@ -724,6 +824,6 @@
   "timezone": "",
   "title": "Soak Test - History",
   "uid": "82d00f2f-2548-496b-a627-0108bf7cb990",
-  "version": 4,
+  "version": 5,
   "weekStart": ""
 }

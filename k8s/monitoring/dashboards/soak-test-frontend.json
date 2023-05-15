@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 28,
+  "id": 29,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -561,6 +561,6 @@
   "timezone": "browser",
   "title": "Soak Test - Frontend",
   "uid": "7e2f4673-fd2a-44a5-8b16-3b20b0427a30",
-  "version": 7,
+  "version": 3,
   "weekStart": ""
 }

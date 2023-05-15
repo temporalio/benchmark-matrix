@@ -20,11 +20,11 @@ config:
         Request: 1
       Memory:
         Request: 1Gi
-      Pods: 5
-      WorkflowPollers: 150
-      ActivityPollers: 250
+      Pods: 2
+      WorkflowPollers: 10
+      ActivityPollers: 10
     SoakTest:
-      ConcurrentWorkflows: 35
+      ConcurrentWorkflows: 10
       Pods: 1
       CPU:
         Request: 1
@@ -50,16 +50,16 @@ config:
       Memory:
         Request: 1Gi
     History:
-      Pods: 4
+      Pods: 2
       CPU:
-        Request: 2
+        Request: 1
       Memory:
-        Request: 8Gi
-      Shards: 512
+        Request: 1Gi
+      Shards: 1024
     Matching:
-      Pods: 4
+      Pods: 2
       CPU:
-        Request: 2
+        Request: 1
       Memory:
         Request: 1Gi
       TaskQueuePartitions: 4

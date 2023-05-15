@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 35,
+  "id": 34,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -148,7 +148,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum(\n    node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"temporal\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-$services\", workload_type=\"statefulset\"}\n) by (pod)\n/sum(\n    kube_pod_container_resource_requests{job=\"kube-state-metrics\",namespace=\"temporal\",resource=\"cpu\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-$services\", workload_type=\"statefulset\"}\n) by (pod)\n",
+          "expr": "sum(\n  rate(container_cpu_usage_seconds_total{container=\"temporal\"}[$__rate_interval])\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-$services\", workload_type=\"statefulset\"}\n) by (pod)\n/sum(\n    kube_pod_container_resource_requests{job=\"kube-state-metrics\",namespace=\"temporal\",resource=\"cpu\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-$services\", workload_type=\"statefulset\"}\n) by (pod)\n",
           "interval": "",
           "legendFormat": "__auto",
           "range": true,
@@ -334,6 +334,41 @@
                   "fixedColor": "dark-orange",
                   "mode": "fixed"
                 }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
               }
             ]
           }
@@ -366,7 +401,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "sum(\n    node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"temporal\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-$services\", workload_type=\"statefulset\"}\n) by (pod)",
+          "expr": "sum(\n  rate(container_cpu_usage_seconds_total{container=\"temporal\"}[$__rate_interval])\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-$services\", workload_type=\"statefulset\"}\n) by (pod)",
           "interval": "",
           "legendFormat": "__auto",
           "range": true,
@@ -380,9 +415,21 @@
           "editorMode": "code",
           "expr": "avg(\n  kube_pod_container_resource_requests{job=\"kube-state-metrics\",namespace=\"temporal\",resource=\"cpu\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-$services\", workload_type=\"statefulset\"})",
           "hide": false,
-          "legendFormat": "request",
+          "legendFormat": "container request",
           "range": true,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "avg(\n  kube_pod_container_resource_limits{job=\"kube-state-metrics\",namespace=\"temporal\",resource=\"cpu\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-$services\", workload_type=\"statefulset\"})",
+          "hide": false,
+          "legendFormat": "container limit",
+          "range": true,
+          "refId": "C"
         }
       ],
       "title": "$services CPU",
@@ -457,6 +504,41 @@
                   "fixedColor": "dark-orange",
                   "mode": "fixed"
                 }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
               }
             ]
           }
@@ -503,12 +585,24 @@
           "editorMode": "code",
           "expr": "avg(\n  kube_pod_container_resource_requests{job=\"kube-state-metrics\",namespace=\"temporal\",resource=\"memory\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-$services\", workload_type=\"statefulset\"})",
           "hide": false,
-          "legendFormat": "request",
+          "legendFormat": "pod request",
           "range": true,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "avg(\n  kube_pod_container_resource_requests{job=\"kube-state-metrics\",namespace=\"temporal\",resource=\"memory\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"temporal\", workload=\"temporal-$services\", workload_type=\"statefulset\"})",
+          "hide": false,
+          "legendFormat": "pod limit",
+          "range": true,
+          "refId": "C"
         }
       ],
-      "title": "$services Memory",
+      "title": "$services memory",
       "type": "timeseries"
     },
     {
@@ -519,38 +613,9 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
+          "decimals": 0,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -569,23 +634,25 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 4,
         "w": 12,
         "x": 0,
         "y": 17
       },
       "id": 20,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "textMode": "auto"
       },
       "pluginVersion": "9.3.2",
       "targets": [
@@ -604,7 +671,7 @@
         }
       ],
       "title": "$services GOMAXPROCS",
-      "type": "timeseries"
+      "type": "stat"
     }
   ],
   "refresh": "30s",
@@ -672,6 +739,6 @@
   "timezone": "",
   "title": "Soak Test - Pods",
   "uid": "JjZ8XAsVk",
-  "version": 4,
+  "version": 7,
   "weekStart": ""
 }

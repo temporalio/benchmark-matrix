@@ -24,7 +24,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 30,
+  "id": 36,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -246,6 +246,6 @@
   "timezone": "browser",
   "title": "Soak Test - Worker",
   "uid": "af4475f3-4457-42b5-9586-d396aa45319c",
-  "version": 6,
+  "version": 3,
   "weekStart": ""
 }

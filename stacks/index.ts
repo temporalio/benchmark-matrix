@@ -237,9 +237,6 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
         dbType = "mysql";
         dbPort = 3306;
         dbPrefix = "MYSQL";
-        dbExtras = {
-            "MYSQL_TX_ISOLATION_COMPAT": "true"
-        };
     } else {
         throw("invalid RDS config");
     }
@@ -263,7 +260,7 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
         const engine = config.Engine;
 
         const rdsCluster = new aws.rds.Cluster(name, {
-            availabilityZones: awsConfig.AvailabilityZones,
+            availabilityZones: awsConfig.AvailabilityZones.slice(1),
             dbSubnetGroupName: awsConfig.RdsSubnetGroupName,
             vpcSecurityGroupIds: [rdsSecurityGroup.id],
             clusterIdentifierPrefix: name,
@@ -326,7 +323,7 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
     }
 
     return {
-        "NUM_HISTORY_SHARDS": temporalConfig.History.Shards.toString(),    
+        "NUM_HISTORY_SHARDS": temporalConfig.History.Shards.toString(),
         "DB": dbType,
         "DB_PORT": dbPort.toString(),
         [`${dbPrefix}_SEEDS`]: endpoint.apply(s => s.toString()),
@@ -729,7 +726,7 @@ const temporalAutoSetup = new k8s.batch.v1.Job("temporal-autosetup",
                     containers: [
                         {
                             name: "autosetup",
-                            image: "temporalio/auto-setup:1.20.0",
+                            image: "temporalio/auto-setup:1.20.3",
                             imagePullPolicy: "IfNotPresent",
                             command: ["/etc/temporal/auto-setup.sh"],
                             envFrom: [

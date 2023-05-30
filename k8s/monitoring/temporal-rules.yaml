@@ -21,14 +21,25 @@ spec:
       labels:
         namespace: temporal
         severity: critical
-    # - alert: TemporalShardLockLatencyHigh
-    #   annotations:
-    #     description: Temporal shard lock latency is currently {{ $value | humanize }}, outside of SLO of 1ms.
-    #     summary: Temporal shard lock latency is too high.
-    #   expr: |
-    #     histogram_quantile(0.95, sum by (le) (rate(lock_latency_bucket[5m])))
-    #     > 0.001
-    #   for: 5m
-    #   labels:
-    #     namespace: temporal
-    #     severity: critical
+    - alert: TemporalWorkflowTaskScheduleToStartLatencyHigh
+      annotations:
+        description: Temporal Workflow Task Schedule to Start latency is currently {{ $value | humanize }}, outside of SLO 150ms.
+        summary: Temporal Workflow Task Schedule to Start latency is too high.
+      expr: |
+        histogram_quantile(0.95, sum by (le) (rate(temporal_workflow_task_schedule_to_start_latency_bucket{namespace="default"}[5m])))
+        > 0.150
+      for: 5m
+      labels:
+        namespace: temporal
+        severity: critical
+    - alert: TemporalActivityScheduleToStartLatencyHigh
+      annotations:
+        description: Temporal Activity Schedule to Start latency is currently {{ $value | humanize }}, outside of SLO 150ms.
+        summary: Temporal Activity Schedule to Start latency is too high.
+      expr: |
+        histogram_quantile(0.95, sum by (le) (rate(temporal_activity_schedule_to_start_latency_bucket{namespace="default"}[5m])))
+        > 0.150
+      for: 5m
+      labels:
+        namespace: temporal
+        severity: critical

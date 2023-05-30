@@ -17,14 +17,14 @@ config:
   temporal-benchmarks-k8s:Benchmark:
     Workers:
       CPU:
-        Request: 1
+        Request: 2
       Memory:
         Request: 1Gi
-      Pods: 2
-      WorkflowPollers: 10
-      ActivityPollers: 10
+      Pods: 4
+      WorkflowPollers: 700
+      ActivityPollers: 1000
     SoakTest:
-      ConcurrentWorkflows: 10
+      ConcurrentWorkflows: 140
       Pods: 1
       CPU:
         Request: 1
@@ -33,31 +33,31 @@ config:
   temporal-benchmarks-k8s:Cluster:
     EKS:
       NodeCount: 3
-      TemporalNodeCount: 3
+      TemporalNodeCount: 8
       NodeType: m5.2xlarge
   temporal-benchmarks-k8s:Persistence:
     RDS:
       Engine: mysql
-      EngineVersion: "5.7.41"
-      InstanceType: db.r5.xlarge
+      EngineVersion: "8.0.32"
+      InstanceType: db.r5.4xlarge
   temporal-benchmarks-k8s:Temporal:
     SetCPULimits: false
     SetGoMaxProcs: true
     Frontend:
-      Pods: 2
+      Pods: 4
       CPU:
-        Request: 1
+        Request: 2
       Memory:
         Request: 1Gi
     History:
-      Pods: 2
+      Pods: 8
       CPU:
-        Request: 1
+        Request: 4
       Memory:
-        Request: 1Gi
+        Request: 8Gi
       Shards: 1024
     Matching:
-      Pods: 2
+      Pods: 4
       CPU:
         Request: 1
       Memory:
@@ -69,3 +69,10 @@ config:
         Request: 1
       Memory:
         Request: 1Gi
+    DynamicConfig:
+      frontend.rps:
+      - value: 6000
+      frontend.namespaceCount:
+      - value: 6000
+      matching.rps:
+      - value: 6000

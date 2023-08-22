@@ -10,8 +10,8 @@ const awsConfig = config.requireObject<AWSConfig>('AWS');
 const dynamicConfig = (config: TemporalConfig): pulumi.Output<Object> => {
     const dc = config.DynamicConfig || {};
     const matchingConfig = {
-        'matching.numTaskqueueReadPartitions': [{ value: config.Matching.TaskQueuePartitions }],
-        'matching.numTaskqueueWritePartitions': [{ value: config.Matching.TaskQueuePartitions }],
+        'matching.numTaskqueueReadPartitions': [{ value: config.Matching.TaskQueuePartitions, constraints: { namespace: "default" } }],
+        'matching.numTaskqueueWritePartitions': [{ value: config.Matching.TaskQueuePartitions, constraints: { namespace: "default" } }],
     }
 
     return pulumi.output({ ...dc, ...matchingConfig })
@@ -120,6 +120,7 @@ interface RDSPersistenceConfig {
     EnvironmentStackName: string;
     Engine: string;
     EngineVersion: string;
+    IOPS: number | undefined;
     InstanceType: string;
     Cluster: boolean;
 }
@@ -307,6 +308,7 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
 
         const rdsInstance = new aws.rds.Instance(name, {
             allocatedStorage: 1024,
+            iops: config.IOPS,
             availabilityZone: awsConfig.AvailabilityZones[0],
             dbSubnetGroupName: awsConfig.RdsSubnetGroupName,
             vpcSecurityGroupIds: [rdsSecurityGroup.id],
@@ -329,6 +331,7 @@ function rdsPersistence(name: string, config: RDSPersistenceConfig, securityGrou
         [`${dbPrefix}_SEEDS`]: endpoint.apply(s => s.toString()),
         [`${dbPrefix}_USER`]: "temporal",
         [`${dbPrefix}_PWD`]: "temporal",
+        "SQL_MAX_CONNS": "40",
         "DBNAME": "temporal_persistence",
         ...dbExtras,
     };

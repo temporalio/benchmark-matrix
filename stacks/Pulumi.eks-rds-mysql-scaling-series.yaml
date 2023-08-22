@@ -20,49 +20,50 @@ config:
         Request: 2
       Memory:
         Request: 1Gi
-      Pods: 4
-      WorkflowPollers: 700
-      ActivityPollers: 1000
+      Pods: 12
+      WorkflowPollers: 1200
+      ActivityPollers: 2000
     SoakTest:
-      ConcurrentWorkflows: 140
-      Pods: 1
+      ConcurrentWorkflows: 300
+      Pods: 4
       CPU:
         Request: 1
       Memory:
         Request: 1Gi
   temporal-benchmarks-k8s:Cluster:
     EKS:
-      NodeCount: 3
+      NodeCount: 10
       TemporalNodeCount: 8
       NodeType: m5.2xlarge
   temporal-benchmarks-k8s:Persistence:
     RDS:
       Engine: mysql
       EngineVersion: "8.0.32"
-      InstanceType: db.r5.4xlarge
+      InstanceType: db.r5.16xlarge
+      IOPS: 20000
   temporal-benchmarks-k8s:Temporal:
     SetCPULimits: false
     SetGoMaxProcs: true
     Frontend:
-      Pods: 4
+      Pods: 8
       CPU:
         Request: 2
       Memory:
         Request: 1Gi
     History:
-      Pods: 8
+      Pods: 4
       CPU:
         Request: 4
       Memory:
         Request: 8Gi
       Shards: 1024
     Matching:
-      Pods: 4
+      Pods: 8
       CPU:
-        Request: 1
+        Request: 2
       Memory:
         Request: 1Gi
-      TaskQueuePartitions: 4
+      TaskQueuePartitions: 8
     Worker:
       Pods: 2
       CPU:
